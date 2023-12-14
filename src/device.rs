@@ -73,6 +73,10 @@ impl Device {
         }
     }
 
+    pub fn get_mac(&self) -> usize {
+        self.mac
+    }
+
     pub fn update(&mut self) -> Res<()> {
         match &self.kind {
             DeviceKind::Host => self.update_host(),
@@ -108,7 +112,7 @@ impl Device {
         Ok(())
     }
 
-    pub fn push_to_send_buf(&mut self, port: usize, bytes: &[u8]) -> Res<()> {
+    pub fn push_to_send(&mut self, port: usize, bytes: &[u8]) -> Res<()> {
         self.check_port(port)?;
         for b in bytes {
             self.send_buf[port].push_back(*b);
@@ -144,7 +148,7 @@ mod tests {
         let mut host_a = Device::new_host(0, "HostA");
         let mut host_b = Device::new_host(0, "HostB");
         let mut hub = Device::new_hub(1, "Hub", 2, 2);
-        host_a.push_to_send_buf(0, &[1, 2, 3, 4])?;
+        host_a.push_to_send(0, &[1, 2, 3, 4])?;
         for t in 0..4 {
             let x = host_a.send(0)?;
             let x = x.unwrap();
@@ -167,7 +171,7 @@ mod tests {
         let mut host_a = Device::new_host(0, "HostA");
         let mut host_b = Device::new_host(0, "HostB");
         let mut hub = Device::new_hub(1, "Hub", 2, 2);
-        host_a.push_to_send_buf(0, &[1, 2, 3, 4])?;
+        host_a.push_to_send(0, &[1, 2, 3, 4])?;
         for t in 0..6 {
             host_a.update()?;
             host_b.update()?;
