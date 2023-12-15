@@ -1,5 +1,5 @@
-mod physical;
+mod physl;
 
 fn main() {
-    physical::network::run_main().unwrap();
+    physl::network::run_main().unwrap();
 }

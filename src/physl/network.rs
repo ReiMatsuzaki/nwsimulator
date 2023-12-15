@@ -1,8 +1,8 @@
-use std::{fmt, collections::VecDeque};
+use std::collections::VecDeque;
 
-use crate::physical::{hub::Hub, host::Host};
+use crate::physl::{hub::Hub, host::Host, physl_error::PhysicalError};
 
-use super::device::{Device, DeviceError};
+use super::{device::Device, physl_error::Res};
 
 pub struct Network {
     devices: Vec<Box<Device>>,
@@ -16,31 +16,30 @@ pub struct Media {
     port1: usize,
 }
 
-#[derive(Debug)]
-pub struct NetworkError {
-    kind: NetworkErrorKind,
-}
+// #[derive(Debug)]
+// pub struct NetworkError {
+//     kind: NetworkErrorKind,
+// }
 
-impl fmt::Display for NetworkError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let message = match &self.kind {
-            NetworkErrorKind::DeviceError(e) => 
-                format!("Device Error: {}", e),
-            NetworkErrorKind::DeviceNotFound { mac } => 
-                format!("Device not found: {}", mac)
-        };
-        write!(f, "{}", message)
-    }
-}
+// impl fmt::Display for NetworkError {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         let message = match &self.kind {
+//             NetworkErrorKind::DeviceError(e) => 
+//                 format!("Device Error: {}", e),
+//             NetworkErrorKind::DeviceNotFound { mac } => 
+//                 format!("Device not found: {}", mac)
+//         };
+//         write!(f, "{}", message)
+//     }
+// }
 
-#[derive(Debug)]
-pub enum NetworkErrorKind {
-    DeviceError(DeviceError),
-    DeviceNotFound { mac: usize },
-}
+// #[derive(Debug)]
+// pub enum NetworkErrorKind {
+//     DeviceError(PhysicalError),
+//     DeviceNotFound { mac: usize },
+// }
 
-pub type Res<T> = Result<T, NetworkError>;
-
+// pub type Res<T> = Result<T, NetworkError>;
 
 impl Network {
     pub fn new() -> Network {
@@ -50,22 +49,18 @@ impl Network {
         }
     }
 
-    fn error(&self, kind: NetworkErrorKind) -> NetworkError {
-        NetworkError { kind }
-    }
-
     pub fn add_device(&mut self, device: Device) {
         self.devices.push(Box::new(device));
     }
 
     fn find_device(&self, mac: usize) -> Res<(usize, &Device)> {
         for dnum in 0..self.devices.len() {
-            let device = &self.devices[dnum];
+            let device: &Box<Device> = &self.devices[dnum];
             if device.get_mac() == mac {
                 return Ok((dnum, device));
             }
         }
-        Err(self.error(NetworkErrorKind::DeviceNotFound { mac }))
+        Err(PhysicalError::DeviceNotFound { mac })
     }
 
     pub fn connect(&mut self, mac0: usize, port0: usize, mac1: usize, port1: usize) -> Res<()> {
@@ -81,19 +76,17 @@ impl Network {
         for t in 0..max_t {
             println!("t={}", t);
             for device in &mut self.devices {
-                device.update()
-                    .map_err(|e| NetworkError{kind: NetworkErrorKind::DeviceError(e)})?;
+                device.update()?;
             }
             for i in 0..self.medias.len() {
                 let media = &self.medias[i];
-                self.swap_data(media.dnum0, media.port0, media.dnum1, media.port1)
-                    .map_err(|e| NetworkError{kind: NetworkErrorKind::DeviceError(e)})?;
+                self.swap_data(media.dnum0, media.port0, media.dnum1, media.port1)?;
             }
         }
         Ok(())
     }
 
-    fn swap_data(&mut self, dnum0: usize, p0: usize, dnum1: usize, p1: usize) -> Result<(), DeviceError> {
+    fn swap_data(&mut self, dnum0: usize, p0: usize, dnum1: usize, p1: usize) -> Result<(), PhysicalError> {
         let val0 = self.devices[dnum0].send(p0)?;
         let val1 = self.devices[dnum1].send(p1)?;
         if let Some(value) = val0 {
@@ -110,7 +103,6 @@ impl Network {
     pub fn get_receive_buf(&self, mac: usize, port: usize) -> Res<&VecDeque<u8>> {
         let (_, d) = self.find_device(mac)?;
         d.get_receive_buf(port)
-            .map_err(|e| NetworkError{kind: NetworkErrorKind::DeviceError(e)})
     }
 }
 

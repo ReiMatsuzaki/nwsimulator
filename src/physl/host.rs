@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use super::device::{DeviceOperation, Device, Res, DeviceContext};
+use super::{device::{DeviceOperation, Device, DeviceContext}, physl_error::Res};
 
 pub struct Host {}
 

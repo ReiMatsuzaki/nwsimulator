@@ -1,4 +1,6 @@
-use std::{collections::VecDeque, fmt};
+use std::collections::VecDeque;
+
+use super::physl_error::{PhysicalError, Res};
 
 pub struct Device {
 	mac: usize,
@@ -18,30 +20,6 @@ pub trait DeviceOperation {
     fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
 }
 
-#[derive(Debug)]
-pub struct DeviceError {
-    mac: usize,
-    name: String,
-    kind: DeviceErrorKind,
-}
-
-impl fmt::Display for DeviceError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let message = match self.kind {
-            DeviceErrorKind::InvalidPort { port } => 
-                format!("Invalid Port: {}", port),
-        };
-        write!(f, "Error on Device {} ({}): {}", self.mac, self.name, message)
-    }
-}
-
-#[derive(Debug)]
-pub enum DeviceErrorKind {
-    InvalidPort {port: usize},
-}
-
-pub type Res<T> = Result<T, DeviceError>;
-
 impl Device {	
     pub fn new(mac: usize, name: &str, num_ports: usize, device_fn: Box<dyn DeviceOperation>) -> Device {
         Device {
@@ -51,14 +29,6 @@ impl Device {
             receive_buf: vec![VecDeque::new(); num_ports],
             send_buf: vec![VecDeque::new(); num_ports],
             device_op: device_fn,
-        }
-    }
-
-    fn error(&self, kind: DeviceErrorKind) -> DeviceError {
-        DeviceError {
-            mac: self.mac,
-            name: self.name.clone(),
-            kind,
         }
     }
 
@@ -119,7 +89,7 @@ impl Device {
 
     fn check_port(&self, port: usize) -> Res<()> {
         if port >= self.num_ports {
-            return Err(self.error(DeviceErrorKind::InvalidPort { port }))
+            return Err(PhysicalError::InvalidPort { name: self.name.to_string(), mac: self.mac, port })
         }
         Ok(())
     }
@@ -132,7 +102,7 @@ impl Device {
 
 #[cfg(test)]
 mod tests {
-    use crate::physical::{host::Host, hub::Hub};
+    use crate::physl::{host::Host, hub::Hub};
 
     use super::*;
 
