@@ -12,6 +12,7 @@ pub struct Device {
 }
 
 pub struct DeviceContext {
+    pub t: usize, 
     pub mac: usize,
     pub name: String,
     pub num_ports: usize,
@@ -41,21 +42,22 @@ impl Device {
         &self.name
     }
 
-    fn get_context(&self) -> DeviceContext {
+    fn get_context(&self, t: usize) -> DeviceContext {
         DeviceContext {
+            t,
             mac: self.mac,
             name: self.name.clone(),
             num_ports: self.num_ports,
         }
     }
 
-    pub fn update(&mut self) -> Res<()> {
+    pub fn update(&mut self, t: usize) -> Res<()> {
         for port in 0..self.num_ports {
 			// let rbuf = &self.receive_bufs[port];
             // FIXME: avoid clone
             let rbuf = self.receive_buf[port].clone();
 			let res = {
-                let ctx = self.get_context();
+                let ctx = self.get_context(t);
                 let dfn = &mut self.device_op;
                 dfn.apply(&ctx, port, &rbuf)?
             };
@@ -123,7 +125,7 @@ mod tests {
             let x = x.unwrap();
             println!("t:{}, Sent: {}", t, x);
             hub.receive(0, x)?;
-            hub.update()?;
+            hub.update(t)?;
         }
         for t in 0..4 {
             let x = hub.send(1)?;
@@ -142,9 +144,9 @@ mod tests {
         let mut hub = Hub::new(1, "Hub", 2, 2);
         host_a.push_to_send(0, &[1, 2, 3, 4])?;
         for t in 0..6 {
-            host_a.update()?;
-            host_b.update()?;
-            hub.update()?;
+            host_a.update(t)?;
+            host_b.update(t)?;
+            hub.update(t)?;
 
             if let Some(a) = host_a.send(0)? {
                 hub.receive(0, a)?;

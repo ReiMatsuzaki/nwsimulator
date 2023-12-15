@@ -46,40 +46,54 @@ impl Network {
     }
 
     pub fn start(&mut self, max_t: usize) -> Res<()> {
-        println!("t");
+        let disp = crate::output::is_byte_level();
+        if disp {
+            println!("t");
+        }
         for t in 0..max_t {
-            print!("{:>2}: ", t);
+            if disp {
+                print!("{:>2}: ", t);
+            }
             for device in &mut self.devices {
-                device.update()?;
+                device.update(t)?;
             }
             for i in 0..self.medias.len() {
                 let media = &self.medias[i];
                 self.swap_data(media.dnum0, media.port0, media.dnum1, media.port1)?;
             }
-            println!("");
+            if disp {
+                println!("");
+            }
         }
         Ok(())
     }
 
+    // FIXME: rename?
     fn swap_data(&mut self, dnum0: usize, p0: usize, dnum1: usize, p1: usize) -> Result<(), PhyslError> {
+        let disp = crate::output::is_byte_level();
         let val0 = self.devices[dnum0].send(p0)?;
         let val1 = self.devices[dnum1].send(p1)?;
         if let Some(value) = val0 {
-            print!("{}({}) -> {}({}) : 0x{:0>2X}   ", 
+            self.devices[dnum1].receive(p1, value)?;
+            if disp {
+                print!("{}({}) -> {}({}) : 0x{:0>2X}   ", 
                 self.devices[dnum0].get_name(), p0, 
                 self.devices[dnum1].get_name(), p1, value);
-            self.devices[dnum1].receive(p1, value)?;
+            }
         }
         if let Some(value) = val1 {
-            print!("{}({}) -> {}({}) : 0x{:0>2X}   ", 
+            self.devices[dnum0].receive(p0, value)?;
+            if disp {
+                print!("{}({}) -> {}({}) : 0x{:0>2X}   ", 
                 self.devices[dnum1].get_name(), p1,
                 self.devices[dnum0].get_name(), p0, 
                 value);
-            self.devices[dnum0].receive(p0, value)?;
+            }
         }
         Ok(())
     }    
 
+    // FIXME: rename receive_buf to receive_bufs
     pub fn get_receive_buf(&self, mac: usize, port: usize) -> Res<&Vec<u8>> {
         let (_, d) = self.find_device(mac)?;
         d.get_receive_buf(port)
@@ -87,6 +101,7 @@ impl Network {
 }
 
 pub fn run_main() -> Res<()> {
+    crate::output::set_level(crate::output::Level::Byte);
     run_1hub_2host()?;
     Ok(())
 }

@@ -39,6 +39,7 @@ pub fn run_linkl_sample2() -> Result<Vec<u8>, PhyslError> {
 
 pub fn run_sample_ethernet_switch() -> Result<Network, PhyslError> {
     println!("link_sample_ethernet_switch start");
+    crate::output::set_level(crate::output::Level::Frame);
     let mac_a = 0;
     let mac_b = 1;
     let mac_c = 2;
