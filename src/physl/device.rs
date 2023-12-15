@@ -6,7 +6,7 @@ pub struct Device {
 	mac: usize,
 	name: String,
     num_ports: usize,
-	receive_buf: Vec<VecDeque<u8>>,
+	receive_buf: Vec<Vec<u8>>,
 	send_buf: Vec<VecDeque<u8>>,
 	device_op:  Box<dyn DeviceOperation>,
 }
@@ -17,7 +17,7 @@ pub struct DeviceContext {
 }
 
 pub trait DeviceOperation {
-    fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
+    fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &Vec<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
 }
 
 impl Device {	
@@ -26,7 +26,7 @@ impl Device {
             mac,
             name: String::from(name),
             num_ports,
-            receive_buf: vec![VecDeque::new(); num_ports],
+            receive_buf: vec![Vec::new(); num_ports],
             send_buf: vec![VecDeque::new(); num_ports],
             device_op: device_fn,
         }
@@ -83,7 +83,7 @@ impl Device {
 
     pub fn receive(&mut self, port: usize, value: u8) -> Res<()> {
         self.check_port(port)?;
-        self.receive_buf[port].push_back(value);
+        self.receive_buf[port].push(value);
         Ok(())
     }
 
@@ -94,7 +94,7 @@ impl Device {
         Ok(())
     }
 
-    pub fn get_receive_buf(&self, port: usize) -> Res<&VecDeque<u8>> {
+    pub fn get_receive_buf(&self, port: usize) -> Res<&Vec<u8>> {
         self.check_port(port)?;
         Ok(&self.receive_buf[port])
     }

@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use crate::physl::{hub::Hub, host::Host, physl_error::PhysicalError};
 
 use super::{device::Device, physl_error::Res};
@@ -15,31 +13,6 @@ pub struct Media {
     dnum1: usize,
     port1: usize,
 }
-
-// #[derive(Debug)]
-// pub struct NetworkError {
-//     kind: NetworkErrorKind,
-// }
-
-// impl fmt::Display for NetworkError {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         let message = match &self.kind {
-//             NetworkErrorKind::DeviceError(e) => 
-//                 format!("Device Error: {}", e),
-//             NetworkErrorKind::DeviceNotFound { mac } => 
-//                 format!("Device not found: {}", mac)
-//         };
-//         write!(f, "{}", message)
-//     }
-// }
-
-// #[derive(Debug)]
-// pub enum NetworkErrorKind {
-//     DeviceError(PhysicalError),
-//     DeviceNotFound { mac: usize },
-// }
-
-// pub type Res<T> = Result<T, NetworkError>;
 
 impl Network {
     pub fn new() -> Network {
@@ -100,7 +73,7 @@ impl Network {
         Ok(())
     }    
 
-    pub fn get_receive_buf(&self, mac: usize, port: usize) -> Res<&VecDeque<u8>> {
+    pub fn get_receive_buf(&self, mac: usize, port: usize) -> Res<&Vec<u8>> {
         let (_, d) = self.find_device(mac)?;
         d.get_receive_buf(port)
     }
@@ -111,7 +84,7 @@ pub fn run_main() -> Res<()> {
     Ok(())
 }
 
-fn run_1hub_2host() -> Res<VecDeque<u8>> {
+fn run_1hub_2host() -> Res<Vec<u8>> {
     let mut nw = Network::new();
     let mac_host_a = 1011;
     let mac_host_b = 1012;

@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use super::{device::{DeviceOperation, Device, DeviceContext}, physl_error::Res};
 
 pub struct Host {}
@@ -12,7 +10,7 @@ impl Host {
 }
 
 impl DeviceOperation for Host {
-    fn apply(&mut self, _ctx: &DeviceContext, _port: usize, _rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
+    fn apply(&mut self, _ctx: &DeviceContext, _port: usize, _rbuf: &Vec<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
         Ok(Vec::new())
     }
 }

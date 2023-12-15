@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use super::{device::{DeviceOperation, Device, DeviceContext}, physl_error::Res};
 
 pub struct Hub {
@@ -13,7 +11,7 @@ impl Hub {
 }
 
 impl DeviceOperation for Hub {
-    fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
+    fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &Vec<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
         let mut res = Vec::new();
         let rlen = rbuf.len();
         if rlen >= self.store_size {
