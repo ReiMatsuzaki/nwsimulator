@@ -122,10 +122,10 @@ fn run_1hub_2host() -> Res<VecDeque<u8>> {
     let mac_host_a = 1011;
     let mac_host_b = 1012;
     let mac_hub = 1013;
-    let mut host_a = device::Device::new_host(mac_host_a, "HostA");
+    let mut host_a = device::host::Host::new(mac_host_a, "HostA");
     host_a.push_to_send(0, b"Hello").unwrap();
-    let host_b = device::Device::new_host(mac_host_b, "HostB");
-    let hub = device::Device::new_hub(mac_hub, "Hub", 2, 2);
+    let host_b = device::host::Host::new(mac_host_b, "HostB");
+    let hub = device::hub::Hub::new(mac_hub, "Hub", 2, 2);
     nw.add_device(host_a);
     nw.add_device(host_b);
     nw.add_device(hub);

@@ -1,3 +1,6 @@
+pub mod hub;
+pub mod host;
+
 use std::{collections::VecDeque, fmt};
 
 pub struct Device {
@@ -11,41 +14,6 @@ pub struct Device {
 
 pub trait DeviceOperation {
     fn apply(&mut self, mac: usize, num_ports: usize, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
-}
-
-// pub enum DeviceKind { 
-//     Host,
-//     Hub(Hub)
-// }
-
-pub struct Hub {
-    store_size: usize,
-}
-impl DeviceOperation for Hub {
-    fn apply(&mut self, _: usize, num_ports: usize, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
-        let mut res = Vec::new();
-        let rlen = rbuf.len();
-        if rlen >= self.store_size {
-            for p2 in 0..num_ports {
-                if p2 != port {
-                    let mut sbuf = Vec::new();
-                    for i in 0..rlen {
-                        let x = rbuf[i];
-                        sbuf.push(x);
-                    }
-                    res.push((p2, sbuf));
-                }
-            }
-        }
-        Ok(res)
-    }
-}
-
-pub struct Host {}
-impl DeviceOperation for Host {
-    fn apply(&mut self, _mac: usize, _num_ports: usize, _port: usize, _rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
-        Ok(Vec::new())
-    }
 }
 
 #[derive(Debug)]
@@ -82,14 +50,6 @@ impl Device {
             send_buf: vec![VecDeque::new(); num_ports],
             device_op: device_fn,
         }
-    }
-
-    pub fn new_host(mac: usize, name: &str) -> Device {
-        Self::new(mac, name, 1, Box::new(Host {  }))
-    }
-
-    pub fn new_hub(mac: usize, name: &str, num_ports: usize, store_size: usize) -> Device {
-        Self::new(mac, name, num_ports, Box::new(Hub { store_size }))
     }
 
     fn error(&self, kind: DeviceErrorKind) -> DeviceError {
@@ -168,9 +128,9 @@ mod tests {
 
     #[test]
     fn test_device() -> Res<()> {
-        let mut host_a = Device::new_host(0, "HostA");
-        let mut host_b = Device::new_host(0, "HostB");
-        let mut hub = Device::new_hub(1, "Hub", 2, 2);
+        let mut host_a = host::Host::new(0, "HostA");
+        let mut host_b = host::Host::new(0, "HostB");
+        let mut hub = hub::Hub::new(1, "Hub", 2, 2);
         host_a.push_to_send(0, &[1, 2, 3, 4])?;
         for t in 0..4 {
             let x = host_a.send(0)?;
@@ -191,9 +151,9 @@ mod tests {
 
     #[test]
     fn test_device_2() -> Res<()> {
-        let mut host_a = Device::new_host(0, "HostA");
-        let mut host_b = Device::new_host(0, "HostB");
-        let mut hub = Device::new_hub(1, "Hub", 2, 2);
+        let mut host_a = host::Host::new(0, "HostA");
+        let mut host_b = host::Host::new(0, "HostB");
+        let mut hub = hub::Hub::new(1, "Hub", 2, 2);
         host_a.push_to_send(0, &[1, 2, 3, 4])?;
         for t in 0..6 {
             host_a.update()?;

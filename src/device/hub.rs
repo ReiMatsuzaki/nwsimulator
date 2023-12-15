@@ -1,0 +1,33 @@
+use super::{Device, DeviceOperation, Res};
+use std::collections::VecDeque;
+
+pub struct Hub {
+    store_size: usize,
+}
+
+impl Hub {
+    pub fn new(mac: usize, name: &str, num_ports: usize, store_size: usize) -> Device {
+        Device::new(mac, name, num_ports, Box::new(Hub { store_size }))
+    }
+}
+
+impl DeviceOperation for Hub {
+    fn apply(&mut self, _: usize, num_ports: usize, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
+        let mut res = Vec::new();
+        let rlen = rbuf.len();
+        if rlen >= self.store_size {
+            for p2 in 0..num_ports {
+                if p2 != port {
+                    let mut sbuf = Vec::new();
+                    for i in 0..rlen {
+                        let x = rbuf[i];
+                        sbuf.push(x);
+                    }
+                    res.push((p2, sbuf));
+                }
+            }
+        }
+        Ok(res)
+    }
+}
+
