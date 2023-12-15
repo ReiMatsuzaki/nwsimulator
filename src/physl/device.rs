@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use super::physl_error::{PhysicalError, Res};
+use super::physl_error::{PhyslError, Res};
 
 pub struct Device {
 	mac: usize,
@@ -13,6 +13,7 @@ pub struct Device {
 
 pub struct DeviceContext {
     pub mac: usize,
+    pub name: String,
     pub num_ports: usize,
 }
 
@@ -36,9 +37,14 @@ impl Device {
         self.mac
     }
 
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
     fn get_context(&self) -> DeviceContext {
         DeviceContext {
             mac: self.mac,
+            name: self.name.clone(),
             num_ports: self.num_ports,
         }
     }
@@ -89,7 +95,7 @@ impl Device {
 
     fn check_port(&self, port: usize) -> Res<()> {
         if port >= self.num_ports {
-            return Err(PhysicalError::InvalidPort { name: self.name.to_string(), mac: self.mac, port })
+            return Err(PhyslError::InvalidPort { name: self.name.to_string(), mac: self.mac, port })
         }
         Ok(())
     }

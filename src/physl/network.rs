@@ -1,4 +1,4 @@
-use crate::physl::{hub::Hub, host::Host, physl_error::PhysicalError};
+use crate::physl::{hub::Hub, host::Host, physl_error::PhyslError};
 
 use super::{device::Device, physl_error::Res};
 
@@ -33,7 +33,7 @@ impl Network {
                 return Ok((dnum, device));
             }
         }
-        Err(PhysicalError::DeviceNotFound { mac })
+        Err(PhyslError::DeviceNotFound { mac })
     }
 
     pub fn connect(&mut self, mac0: usize, port0: usize, mac1: usize, port1: usize) -> Res<()> {
@@ -47,7 +47,7 @@ impl Network {
     pub fn start(&mut self, max_t: usize) -> Res<()> {
         println!("t");
         for t in 0..max_t {
-            println!("t={}", t);
+            print!("{:>2}: ", t);
             for device in &mut self.devices {
                 device.update()?;
             }
@@ -55,19 +55,25 @@ impl Network {
                 let media = &self.medias[i];
                 self.swap_data(media.dnum0, media.port0, media.dnum1, media.port1)?;
             }
+            println!("");
         }
         Ok(())
     }
 
-    fn swap_data(&mut self, dnum0: usize, p0: usize, dnum1: usize, p1: usize) -> Result<(), PhysicalError> {
+    fn swap_data(&mut self, dnum0: usize, p0: usize, dnum1: usize, p1: usize) -> Result<(), PhyslError> {
         let val0 = self.devices[dnum0].send(p0)?;
         let val1 = self.devices[dnum1].send(p1)?;
         if let Some(value) = val0 {
-            println!("{}({}) -> {}({}) : {}", dnum0, p0, dnum1, p1, value);
+            print!("{}({}) -> {}({}) : 0x{:0>2X}   ", 
+                self.devices[dnum0].get_name(), p0, 
+                self.devices[dnum1].get_name(), p1, value);
             self.devices[dnum1].receive(p1, value)?;
         }
         if let Some(value) = val1 {
-            println!("{}({}) -> {}({}) : {}", dnum1, p1, dnum0, p0, value);
+            print!("{}({}) -> {}({}) : 0x{:0>2X}   ", 
+                self.devices[dnum1].get_name(), p1,
+                self.devices[dnum0].get_name(), p0, 
+                value);
             self.devices[dnum0].receive(p0, value)?;
         }
         Ok(())
