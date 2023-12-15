@@ -1,7 +1,7 @@
 
 use std::fmt;
 
-use crate::linkl::LinklError;
+use crate::linkl::linkl_error::LinklError;
 
 #[derive(Debug)]
 pub enum PhyslError {

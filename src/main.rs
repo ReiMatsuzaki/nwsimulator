@@ -4,7 +4,7 @@ mod linkl;
 fn main() {
     physl::network::run_main().unwrap();
     println!("");
-    linkl::run_linkl_sample();
+    linkl::ethernet_frame::run_linkl_sample();
     println!("");
     linkl::run_linkl_sample2().unwrap();
 }
