@@ -14,13 +14,15 @@ impl EthernetOperation for EtherEcho {
         for port in 0..ctx.num_ports {
             let rbuf = &mut rbufs[port];
             while let Some(frame) = rbuf.pop_front() {
-                let n = format!("{}:{}", ctx.name, port);
-                println!("t={:<3}  {:<15}  echo:  {:?}", ctx.t, n, frame);
+                frame.print_msg(Some(&ctx), port, "receive");
                 if frame.dst == ctx.mac as u64 {
                     let response = EthernetFrame::new(frame.src, frame.dst, frame.ethertype, frame.payload);
+                    let s = format!("send to {}", port);
+                    response.print_msg(None, port, s.as_str());
+
                     sbufs[port].push_back(response);
                 } else {
-                    // invalid destination mac address
+                    frame.print_msg(None, port, "receive");
                 }
             }
         }

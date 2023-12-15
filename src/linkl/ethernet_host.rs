@@ -30,12 +30,10 @@ impl EthernetOperation for EthernetHost {
         for port in 0..ctx.num_ports {
             let f = &mut rbufs[port];
             while let Some(frame) = f.pop_front() {
-                let n = format!("{}:{}", ctx.name, port);
-                println!("t={:<3}  {:<15}  receive:  {:?}", ctx.t, n, frame);
                 if frame.dst == ctx.mac as u64 {
-                    // valid destination mac address
+                    frame.print_msg(Some(&ctx), port, "receive(valid)");
                 } else {
-                    // invalid destination mac address
+                    frame.print_msg(Some(&ctx), port, "receive(invalid)");
                 }
             }
         }

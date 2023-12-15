@@ -74,17 +74,3 @@ impl Ethernet {
         }
     }
 }
-    // fn update(&mut self, ctx: &DeviceContext) -> Result<Vec<(usize, Vec<u8>)>, PhyslError> {
-    //     let disp = crate::output::is_frame_level();
-    //     let out_frames = self.op.update(ctx)
-    //         .map_err(|e| PhyslError::LinklError {e})?;
-    //     let out_bytes = out_frames.iter().map(|(port, frame)| {
-    //         if disp {
-    //             let msg = format!("{:>3},   {:<11}", ctx.t, ctx.name);
-    //             println!("{} send to {}. {:?}", msg, port, frame);
-    //         }
-    //         (port.clone(), EthernetFrame::encode(frame))
-    //     }).collect();
-    //     Ok(out_bytes)
-    // }
-// }

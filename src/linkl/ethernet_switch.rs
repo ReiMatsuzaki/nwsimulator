@@ -25,8 +25,7 @@ impl EthernetOperation for EthernetSwitch {
        ) -> Res<()> {
         for (port, rbuf) in rbufs.iter_mut().enumerate() {
             while let Some(frame) = rbuf.pop_front() {
-                let n = format!("{}:{}", ctx.name, port);
-                println!("t={:<3}  {:<15}  receive:  {:?}", ctx.t, n, frame);
+                frame.print_msg(Some(&ctx), port, "receive");
 
                 // update forward table
                 self.forward_table.insert(frame.src as usize, port);
@@ -34,11 +33,14 @@ impl EthernetOperation for EthernetSwitch {
                 if let Some(dst_port) = self.forward_table.get(&(frame.dst as usize)) {
                     // use forward table
                     sbufs[*dst_port].push_back(frame.clone());
-                    println!("{}  send to {}:  {:?}", " ".repeat(22), *dst_port, frame);
+                    let s = format!("send to {}", *dst_port);
+                    frame.print_msg(None, port, s.as_str());
                 } else {
                     for dst_port in 0..ctx.num_ports {
                         if dst_port != port {
                             sbufs[dst_port].push_back(frame.clone());
+                            let s = format!("send to {}", dst_port);
+                            frame.print_msg(None, port, s.as_str());
                         }
                     }
                 }

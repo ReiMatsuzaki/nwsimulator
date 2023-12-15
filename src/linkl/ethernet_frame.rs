@@ -1,4 +1,4 @@
-use crate::linkl::linkl_error::Res;
+use crate::{linkl::linkl_error::Res, physl::device::DeviceContext};
 
 use super::linkl_error::LinklError;
 
@@ -73,6 +73,22 @@ impl EthernetFrame {
         // FIXME: avoid clone
         xs.append(&mut frame.payload.clone());
         xs
+    }
+
+    // FIXME: define send frame buffers and receive frame buffers.
+    //        and logging is done in the buffers.
+    pub fn print_msg(&self, ctx: Option<&DeviceContext>, port: usize, act: &str) {
+        match ctx {
+            Some(ctx) => {
+                let n = format!("{}:{}", ctx.name, port);
+                println!("t={:<3}  {:<10}  {:<18}  {:?}",
+                         ctx.t, n, act, self)
+            },
+            None => {
+                println!("  {:<3}  {:<10}  {:<18}  {:?}",
+                        "", "", act, self)
+            }
+        };
     }
 }
 
