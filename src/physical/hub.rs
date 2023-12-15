@@ -1,5 +1,6 @@
-use super::{Device, DeviceOperation, Res};
 use std::collections::VecDeque;
+
+use super::device::{DeviceOperation, Device, Res};
 
 pub struct Hub {
     store_size: usize,

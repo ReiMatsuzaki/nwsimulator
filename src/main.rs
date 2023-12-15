@@ -1,7 +1,5 @@
-mod device;
-mod network;
-use network::run_main;
+mod physical;
 
 fn main() {
-    run_main().unwrap();
+    physical::network::run_main().unwrap();
 }

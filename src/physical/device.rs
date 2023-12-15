@@ -1,6 +1,3 @@
-pub mod hub;
-pub mod host;
-
 use std::{collections::VecDeque, fmt};
 
 pub struct Device {
@@ -124,13 +121,15 @@ impl Device {
 
 #[cfg(test)]
 mod tests {
+    use crate::physical::{host::Host, hub::Hub};
+
     use super::*;
 
     #[test]
     fn test_device() -> Res<()> {
-        let mut host_a = host::Host::new(0, "HostA");
-        let mut host_b = host::Host::new(0, "HostB");
-        let mut hub = hub::Hub::new(1, "Hub", 2, 2);
+        let mut host_a = Host::new(0, "HostA");
+        let mut host_b = Host::new(0, "HostB");
+        let mut hub = Hub::new(1, "Hub", 2, 2);
         host_a.push_to_send(0, &[1, 2, 3, 4])?;
         for t in 0..4 {
             let x = host_a.send(0)?;
@@ -151,9 +150,9 @@ mod tests {
 
     #[test]
     fn test_device_2() -> Res<()> {
-        let mut host_a = host::Host::new(0, "HostA");
-        let mut host_b = host::Host::new(0, "HostB");
-        let mut hub = hub::Hub::new(1, "Hub", 2, 2);
+        let mut host_a = Host::new(0, "HostA");
+        let mut host_b = Host::new(0, "HostB");
+        let mut hub = Hub::new(1, "Hub", 2, 2);
         host_a.push_to_send(0, &[1, 2, 3, 4])?;
         for t in 0..6 {
             host_a.update()?;
