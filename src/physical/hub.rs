@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use super::device::{DeviceOperation, Device, Res};
+use super::device::{DeviceOperation, Device, Res, DeviceContext};
 
 pub struct Hub {
     store_size: usize,
@@ -13,11 +13,11 @@ impl Hub {
 }
 
 impl DeviceOperation for Hub {
-    fn apply(&mut self, _: usize, num_ports: usize, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
+    fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
         let mut res = Vec::new();
         let rlen = rbuf.len();
         if rlen >= self.store_size {
-            for p2 in 0..num_ports {
+            for p2 in 0..ctx.num_ports {
                 if p2 != port {
                     let mut sbuf = Vec::new();
                     for i in 0..rlen {

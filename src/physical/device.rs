@@ -9,8 +9,13 @@ pub struct Device {
 	device_op:  Box<dyn DeviceOperation>,
 }
 
+pub struct DeviceContext {
+    pub mac: usize,
+    pub num_ports: usize,
+}
+
 pub trait DeviceOperation {
-    fn apply(&mut self, mac: usize, num_ports: usize, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
+    fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
 }
 
 #[derive(Debug)]
@@ -61,16 +66,22 @@ impl Device {
         self.mac
     }
 
+    fn get_context(&self) -> DeviceContext {
+        DeviceContext {
+            mac: self.mac,
+            num_ports: self.num_ports,
+        }
+    }
+
     pub fn update(&mut self) -> Res<()> {
         for port in 0..self.num_ports {
 			// let rbuf = &self.receive_bufs[port];
             // FIXME: avoid clone
             let rbuf = self.receive_buf[port].clone();
 			let res = {
-                let mac = self.mac;
-                let np = self.num_ports;
+                let ctx = self.get_context();
                 let dfn = &mut self.device_op;
-                dfn.apply(mac, np, port, &rbuf)?
+                dfn.apply(&ctx, port, &rbuf)?
             };
             // FIXME: avoid clone
             self.receive_buf[port] = rbuf.clone();
