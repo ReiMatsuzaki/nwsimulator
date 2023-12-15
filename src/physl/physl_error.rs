@@ -8,6 +8,7 @@ pub enum PhyslError {
     InvalidPort {mac: usize, name: String, port: usize},
     DeviceNotFound { mac: usize },
     LinklError { e: LinklError },
+    // InvalidBytes,
 }
 
 impl fmt::Display for PhyslError {
@@ -19,6 +20,8 @@ impl fmt::Display for PhyslError {
                 write!(f, "Device not found: {}", mac),
             PhyslError::LinklError {e} => 
                 write!(f, "LinklError: {:?}", e),
+            // PhyslError::InvalidBytes => 
+            //     write!(f, "InvalidBytes"),
         }
     }
 }

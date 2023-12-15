@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::physl::device::{DeviceContext, Device};
 
 use super::{ethernet::{EthernetOperation, Ethernet}, ethernet_frame::EthernetFrame, linkl_error::Res};
@@ -13,28 +15,37 @@ pub struct EthernetHost { schedules: Vec<Schedule> }
 impl EthernetHost {
     pub fn build(mac: usize, name: &str, num_ports: usize, schedules: Vec<Schedule>) -> Device {
         let op = Box::new(EthernetHost { schedules });
-        let ether = Ethernet { op };
+        let ether = Ethernet::new(op, num_ports);
         let device = Device::new(mac, name, num_ports, Box::new(ether));
         device
     }
 }
 
 impl EthernetOperation for EthernetHost {
-    fn apply(&mut self, ctx: &DeviceContext, _port: usize, frame: EthernetFrame) -> Res<Vec<(usize, EthernetFrame)>> {
-        if frame.dst != ctx.mac as u64 {
-            Ok(vec![]) // FIXME: remove this frame from receive buffer
-        } else {
-            Ok(vec![])
-        }
-    }
-
-    fn update(&mut self, ctx: &DeviceContext) -> Res<Vec<(usize, EthernetFrame)>> {
-        let mut res: Vec<(usize, EthernetFrame)> = Vec::new();
-        for s in &self.schedules {
-            if s.t == ctx.t {
-                res.push((s.port, s.frame.clone()));
+    fn apply(&mut self,
+        ctx: &DeviceContext, 
+        rbufs: &mut Vec<VecDeque<EthernetFrame>>,
+        sbufs: &mut Vec<VecDeque<EthernetFrame>>,
+       ) -> Res<()> {
+        for port in 0..ctx.num_ports {
+            let f = &mut rbufs[port];
+            while let Some(frame) = f.pop_front() {
+                let n = format!("{}:{}", ctx.name, port);
+                println!("t={:<3}  {:<15}  receive:  {:?}", ctx.t, n, frame);
+                if frame.dst == ctx.mac as u64 {
+                    // valid destination mac address
+                } else {
+                    // invalid destination mac address
+                }
             }
         }
-        Ok(res)        
+
+        for s in &self.schedules {
+            if s.t == ctx.t {
+                sbufs[s.port].push_back(s.frame.clone());
+            }
+        }
+
+        Ok(())
     }
 }

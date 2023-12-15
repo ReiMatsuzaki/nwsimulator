@@ -104,18 +104,18 @@ fn split_6bytes(x: u64) -> [u8; 6] {
     ]
 }
 
-pub fn run_linkl_sample() {
-    println!("link_sample start");
-    let xs = vec![
-        0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAB, // preamble
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x01, // dst
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x02, // src
-        0x00, 0x04, // type
-        0x01, 0x02, 0x03, 0x04, // payload
-    ];
-    let frame = EthernetFrame::decode(&xs).unwrap();
-    println!("dst: {:012X}", frame.dst);
-    println!("src: {:012X}", frame.src);
-    println!("type: {:04X}", frame.ethertype);
-    println!("payload: {:?}", frame.payload);
-}
+// pub fn run_linkl_sample() {
+//     println!("link_sample start");
+//     let xs = vec![
+//         0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAB, // preamble
+//         0x00, 0x00, 0x00, 0x00, 0x00, 0x01, // dst
+//         0x00, 0x00, 0x00, 0x00, 0x00, 0x02, // src
+//         0x00, 0x04, // type
+//         0x01, 0x02, 0x03, 0x04, // payload
+//     ];
+//     let frame = EthernetFrame::decode(&xs).unwrap();
+//     println!("dst: {:012X}", frame.dst);
+//     println!("src: {:012X}", frame.src);
+//     println!("type: {:04X}", frame.ethertype);
+//     println!("payload: {:?}", frame.payload);
+// }

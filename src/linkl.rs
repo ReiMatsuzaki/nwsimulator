@@ -12,6 +12,8 @@ pub mod ethernet_host;
 pub fn run_linkl_sample2() -> Result<Vec<u8>, PhyslError> {
     println!("link_sample2 start");
 
+    crate::output::set_level(crate::output::Level::Frame);
+
     let mut host = Host::new(0, "host0");
     let echo = build_ether_echo_device(1, "ether0".to_string());
     let xs: Vec<u8> = vec![
@@ -102,6 +104,6 @@ mod test {
         let rbuf = nw.get_receive_buf(1, 0).unwrap();
         assert_eq!(rbuf.len(), 0);
         let rbuf = nw.get_receive_buf(2, 0).unwrap();
-        assert_eq!(rbuf.len(), 25);
+        assert_eq!(rbuf.len(), 0);
     }
 }

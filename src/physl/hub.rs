@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use super::{device::{DeviceOperation, Device, DeviceContext}, physl_error::Res};
 
 pub struct Hub {
@@ -11,26 +13,24 @@ impl Hub {
 }
 
 impl DeviceOperation for Hub {
-    fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &Vec<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
-        let mut res = Vec::new();
-        let rlen = rbuf.len();
-        if rlen >= self.store_size {
-            for p2 in 0..ctx.num_ports {
-                if p2 != port {
-                    let mut sbuf = Vec::new();
-                    for i in 0..rlen {
-                        let x = rbuf[i];
-                        sbuf.push(x);
+    fn apply(&mut self, ctx: &DeviceContext, rrbuf: &mut Vec<Vec<u8>>, sbuf: &mut Vec<VecDeque<u8>>) -> Res<()> {
+        // FIXME: rrbuf should be Vec<VecDeque<u8>>
+        for port in 0..ctx.num_ports {
+            let rbuf = &mut rrbuf[port];
+            let rlen = rbuf.len();
+            if rlen >= self.store_size {
+                for i in 0..rlen {
+                    let x = rbuf[i];
+                    for dst_port in 0..ctx.num_ports {
+                        if dst_port != port {
+                            sbuf[dst_port].push_back(x);
+                        }
                     }
-                    res.push((p2, sbuf));
                 }
+                rbuf.clear();
             }
         }
-        Ok(res)
-    }
-
-    fn update(&mut self, _ctx: &DeviceContext) -> Res<Vec<(usize, Vec<u8>)>> {
-        Ok(Vec::new())
+        Ok(())
     }
 }
 

@@ -18,12 +18,13 @@ pub struct DeviceContext {
     pub num_ports: usize,
 }
 
+// type PortedBuf = Vec<(usize, Vec<u8>)>;
 pub trait DeviceOperation {
     // FIXME: rename
     // event handler for byte arrival for each port
-    fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &Vec<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
+    fn apply(&mut self, ctx: &DeviceContext, rbuf: &mut Vec<Vec<u8>>, sbuf: &mut Vec<VecDeque<u8>>) -> Res<()>;
     // event handler for time tick
-    fn update(&mut self, ctx: &DeviceContext) -> Res<Vec<(usize, Vec<u8>)>>;
+    // fn update(&mut self, ctx: &DeviceContext, sbuf: &mut Vec<Vec<u8>>) -> Res<()>;
 }
 
 impl Device {	
@@ -57,34 +58,53 @@ impl Device {
 
     pub fn update(&mut self, t: usize) -> Res<()> {
         let ctx = self.get_context(t);
-        let res = self.device_op.update(&ctx)?;
-        for (port, sbuf) in res {
-            for b in sbuf {
-                self.send_buf[port].push_back(b);
-            }
-        }
+        // let (, res) = self.device_op.update(&ctx)?;
+        // for (port, sbuf) in res {
+        //     for b in sbuf {
+        //         self.send_buf[port].push_back(b);
+        //     }
+        // }
 
-        for port in 0..self.num_ports {
-			// let rbuf = &self.receive_bufs[port];
-            // FIXME: avoid clone
-            let rbuf = self.receive_buf[port].clone();
-			let res = {
-                let ctx = self.get_context(t);
-                let dfn = &mut self.device_op;
-                dfn.apply(&ctx, port, &rbuf)?
-            };
-            // FIXME: avoid clone
-            self.receive_buf[port] = rbuf.clone();
-			if !res.is_empty() {
-				self.receive_buf[port].clear();
-                for (port, sbuf) in res {
-                    for b in sbuf {
-                        self.send_buf[port].push_back(b);
-                    }
-                }
-			}
-		}
+        // FIXME: avoid clone
+        let mut rbuf = self.receive_buf.clone();
+        let mut sbuf = self.send_buf.clone();
+        self.device_op.apply(&ctx, &mut rbuf, &mut sbuf)?;
+        self.receive_buf = rbuf;
+        self.send_buf = sbuf;
         Ok(())
+        // let res = {
+        //     let ctx = self.get_context(t);
+        //     let dfn = &mut self.device_op;
+        //     dfn.apply(&ctx, port, &rbuf)
+        // };        
+
+        // for port in 0..self.num_ports {
+		// 	// let rbuf = &self.receive_bufs[port];
+        //     // FIXME: avoid clone
+        //     let rbuf = self.receive_buf[port].clone();
+		// 	let res = {
+        //         let ctx = self.get_context(t);
+        //         let dfn = &mut self.device_op;
+        //         dfn.apply(&ctx, port, &rbuf)
+        //     };
+        //     match res {
+        //         Ok(res) if res.is_empty() => {},
+        //         Ok(res) => {
+        //             self.receive_buf[port].clear();
+        //             for (port, sbuf) in res {
+        //                 for b in sbuf {
+        //                     self.send_buf[port].push_back(b);
+        //                 }
+        //             }
+        //         },
+        //         Err(PhyslError::InvalidBytes) => {
+        //             self.receive_buf[port].clear();
+        //         },
+        //         Err(e) => return Err(e),
+
+        //     }
+		// }
+        // Ok(())
     }
 
     // FIXME: impl in host

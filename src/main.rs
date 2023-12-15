@@ -22,9 +22,9 @@ fn main() -> io::Result<()> {
 
     match rnum {
         1 => physl::network::run_main().unwrap(),
-        2 => linkl::ethernet_frame::run_linkl_sample(),
-        3 => { linkl::run_linkl_sample2().unwrap(); },
-        4 => { linkl::run_sample_ethernet_switch().unwrap(); } ,
+        // 2 => linkl::ethernet_frame::run_linkl_sample(),
+        2 => { linkl::run_linkl_sample2().unwrap(); },
+        3 => { linkl::run_sample_ethernet_switch().unwrap(); } ,
         _ => println!("No such run number"),
     }
 
