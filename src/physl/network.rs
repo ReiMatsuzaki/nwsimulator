@@ -26,7 +26,7 @@ impl Network {
         self.devices.push(Box::new(device));
     }
 
-    fn find_device(&self, mac: usize) -> Res<(usize, &Device)> {
+    pub fn find_device(&self, mac: usize) -> Res<(usize, &Device)> {
         for dnum in 0..self.devices.len() {
             let device: &Box<Device> = &self.devices[dnum];
             if device.get_mac() == mac {

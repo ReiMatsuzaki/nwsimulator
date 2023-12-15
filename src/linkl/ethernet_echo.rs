@@ -10,6 +10,10 @@ impl EthernetOperation for EtherEcho {
         res.push((port, response_frame));
         Ok(res)
     }
+
+    fn update(&mut self, _ctx: &DeviceContext) -> Res<Vec<(usize, EthernetFrame)>> {
+        Ok(vec![])
+    }
 }
 
 // FIXME: move to EtherEcho::build

@@ -19,7 +19,11 @@ pub struct DeviceContext {
 }
 
 pub trait DeviceOperation {
+    // FIXME: rename
+    // event handler for byte arrival for each port
     fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &Vec<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
+    // event handler for time tick
+    fn update(&mut self, ctx: &DeviceContext) -> Res<Vec<(usize, Vec<u8>)>>;
 }
 
 impl Device {	
@@ -52,6 +56,14 @@ impl Device {
     }
 
     pub fn update(&mut self, t: usize) -> Res<()> {
+        let ctx = self.get_context(t);
+        let res = self.device_op.update(&ctx)?;
+        for (port, sbuf) in res {
+            for b in sbuf {
+                self.send_buf[port].push_back(b);
+            }
+        }
+
         for port in 0..self.num_ports {
 			// let rbuf = &self.receive_bufs[port];
             // FIXME: avoid clone
@@ -70,7 +82,7 @@ impl Device {
                         self.send_buf[port].push_back(b);
                     }
                 }
-			}            
+			}
 		}
         Ok(())
     }

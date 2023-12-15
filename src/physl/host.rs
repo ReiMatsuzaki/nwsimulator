@@ -13,4 +13,8 @@ impl DeviceOperation for Host {
     fn apply(&mut self, _ctx: &DeviceContext, _port: usize, _rbuf: &Vec<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
         Ok(Vec::new())
     }
+
+    fn update(&mut self, _ctx: &DeviceContext) -> Res<Vec<(usize, Vec<u8>)>> {
+        Ok(Vec::new())
+    }
 }

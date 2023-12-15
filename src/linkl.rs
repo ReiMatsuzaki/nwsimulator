@@ -1,4 +1,4 @@
-use crate::{physl::{host::Host, network::Network, physl_error::PhyslError}, linkl::ethernet_echo::build_ether_echo_device};
+use crate::{physl::{host::Host, network::Network, physl_error::PhyslError}, linkl::{ethernet_echo::build_ether_echo_device, ethernet_host::EthernetHost}};
 
 use self::{ethernet_switch::EthernetSwitch, ethernet_frame::EthernetFrame};
 
@@ -7,6 +7,7 @@ pub mod ethernet;
 pub mod ethernet_frame;
 pub mod ethernet_echo;
 pub mod ethernet_switch;
+pub mod ethernet_host;
 
 pub fn run_linkl_sample2() -> Result<Vec<u8>, PhyslError> {
     println!("link_sample2 start");
@@ -44,17 +45,16 @@ pub fn run_sample_ethernet_switch() -> Result<Network, PhyslError> {
     let mac_b = 1;
     let mac_c = 2;
     let mac_s = 3;
-    let mut host_a = Host::new(mac_a, "hostA");
-    // let host_b = Host::new(1, "hostB");
-    let host_b = build_ether_echo_device(mac_b, "ether0".to_string());
-    let host_c = Host::new(mac_c, "HostC");
-    let switch = EthernetSwitch::build(mac_s, "switch".to_string(), 3);
 
     let frame = EthernetFrame::new(
         mac_b as u64, mac_a as u64, 3, vec![11, 22, 33]);
-    let xs: Vec<u8> = EthernetFrame::encode(&frame);
-    // xs.append(&mut xs.clone());
-    host_a.push_to_send(0, &xs)?;
+    let schedules = vec![
+        ethernet_host::Schedule{t: 0, port: 0, frame: frame }
+    ];
+    let host_a = EthernetHost::build(mac_a, "hostA", 1, schedules);
+    let host_b = build_ether_echo_device(mac_b, "hostB".to_string());
+    let host_c = EthernetHost::build(mac_c, "hostC", 1, vec![]);
+    let switch = EthernetSwitch::build(mac_s, "switch".to_string(), 3);
 
     let mut nw = Network::new();
     let mac_a = mac_a as usize;
@@ -70,10 +70,11 @@ pub fn run_sample_ethernet_switch() -> Result<Network, PhyslError> {
     nw.start(100)?;    
 
     for mac in [mac_a, mac_b, mac_c] {
+        let (_, d) = nw.find_device(mac)?;
         let rbuf = nw.get_receive_buf(mac, 0)?;
         // let frame = EthernetFrame::decode(&rbuf).unwrap();
         // println!("Host(mac={}): {:?}", mac, frame);
-        print!("Host(mac={}): [", mac,);
+        print!("{}: [", d.get_name());
         for x in rbuf {
             print!("{:02X} ", x)
         }

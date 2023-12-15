@@ -28,5 +28,9 @@ impl DeviceOperation for Hub {
         }
         Ok(res)
     }
+
+    fn update(&mut self, _ctx: &DeviceContext) -> Res<Vec<(usize, Vec<u8>)>> {
+        Ok(Vec::new())
+    }
 }
 

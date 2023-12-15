@@ -3,7 +3,10 @@ use crate::physl::{device::{DeviceOperation, DeviceContext}, physl_error::PhyslE
 use super::{ethernet_frame::EthernetFrame, linkl_error::{LinklError, Res}};
 
 pub trait EthernetOperation {
+    // event handler for ethernet frame arrive
     fn apply(&mut self, ctx: &DeviceContext, port: usize, frame: EthernetFrame) -> Res<Vec<(usize, EthernetFrame)>>;
+    // event handller for time tick
+    fn update(&mut self, ctx: &DeviceContext) -> Res<Vec<(usize, EthernetFrame)>>;
 }
 
 pub struct Ethernet {
@@ -15,7 +18,8 @@ impl DeviceOperation for Ethernet {
         let disp = crate::output::is_frame_level();
         match EthernetFrame::decode(rbuf) {
             Ok(frame) => {
-                let msg = format!("{:>3}, {:>8}:{:<2}", ctx.t, ctx.name, src_port);
+                let name = format!("{}:{}", ctx.name, src_port);
+                let msg = format!("{:>3},   {:<11}", ctx.t, name);
                 if disp {
                     println!("{} receive.   {:?}", msg, frame);
                 }
@@ -34,5 +38,19 @@ impl DeviceOperation for Ethernet {
                 PhyslError::LinklError{e}
             )
         }
+    }
+
+    fn update(&mut self, ctx: &DeviceContext) -> Result<Vec<(usize, Vec<u8>)>, PhyslError> {
+        let disp = crate::output::is_frame_level();
+        let out_frames = self.op.update(ctx)
+            .map_err(|e| PhyslError::LinklError {e})?;
+        let out_bytes = out_frames.iter().map(|(port, frame)| {
+            if disp {
+                let msg = format!("{:>3},   {:<11}", ctx.t, ctx.name);
+                println!("{} send to {}. {:?}", msg, port, frame);
+            }
+            (port.clone(), EthernetFrame::encode(frame))
+        }).collect();
+        Ok(out_bytes)
     }
 }

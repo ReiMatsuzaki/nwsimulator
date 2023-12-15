@@ -33,5 +33,9 @@ impl EthernetOperation for EthernetSwitch {
         }
         Ok(res)
     }
+
+    fn update(&mut self, _ctx: &DeviceContext) -> Res<Vec<(usize, EthernetFrame)>> {
+        Ok(vec![])
+    }
 }
 
