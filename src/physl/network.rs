@@ -36,6 +36,7 @@ impl Network {
         Err(PhyslError::DeviceNotFound { mac })
     }
 
+    // FIXME: mac address should be u64
     pub fn connect(&mut self, mac0: usize, port0: usize, mac1: usize, port1: usize) -> Res<()> {
         let (dnum0, _) = self.find_device(mac0)?;
         let (dnum1, _) = self.find_device(mac1)?;

@@ -11,6 +11,7 @@ pub struct Ethernet {
 }
 impl DeviceOperation for Ethernet {
     fn apply(&mut self, ctx: &DeviceContext, port: usize, rbuf: &Vec<u8>) -> Result<Vec<(usize, Vec<u8>)>, PhyslError> {
+        // FIXME: if error occured, receive buffer shold be cleared
         match EthernetFrame::decode(rbuf) {
             Ok(frame) => {
                 let out_frames = self.op.apply(ctx, port, frame)

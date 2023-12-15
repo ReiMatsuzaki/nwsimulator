@@ -7,4 +7,6 @@ fn main() {
     linkl::ethernet_frame::run_linkl_sample();
     println!("");
     linkl::run_linkl_sample2().unwrap();
+    println!("");
+    linkl::run_sample_ethernet_switch().unwrap();
 }
