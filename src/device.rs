@@ -6,16 +6,46 @@ pub struct Device {
     num_ports: usize,
 	receive_buf: Vec<VecDeque<u8>>,
 	send_buf: Vec<VecDeque<u8>>,
-	kind: DeviceKind,
+	device_fn:  Box<dyn DeviceFn>,
 }
 
-pub enum DeviceKind { 
-    Host,
-    Hub(Hub)
+pub trait DeviceFn {
+    fn apply(&mut self, mac: usize, num_ports: usize, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>>;
 }
+
+// pub enum DeviceKind { 
+//     Host,
+//     Hub(Hub)
+// }
 
 pub struct Hub {
     store_size: usize,
+}
+impl DeviceFn for Hub {
+    fn apply(&mut self, _: usize, num_ports: usize, port: usize, rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
+        let mut res = Vec::new();
+        let rlen = rbuf.len();
+        if rlen >= self.store_size {
+            for p2 in 0..num_ports {
+                if p2 != port {
+                    let mut sbuf = Vec::new();
+                    for i in 0..rlen {
+                        let x = rbuf[i];
+                        sbuf.push(x);
+                    }
+                    res.push((p2, sbuf));
+                }
+            }
+        }
+        Ok(res)
+    }
+}
+
+pub struct Host {}
+impl DeviceFn for Host {
+    fn apply(&mut self, _mac: usize, _num_ports: usize, _port: usize, _rbuf: &VecDeque<u8>) -> Res<Vec<(usize, Vec<u8>)>> {
+        Ok(Vec::new())
+    }
 }
 
 #[derive(Debug)]
@@ -43,26 +73,23 @@ pub enum DeviceErrorKind {
 pub type Res<T> = Result<T, DeviceError>;
 
 impl Device {	
-    pub fn new_host(mac: usize, name: &str) -> Device {
-        Device {
-            mac,
-            name: String::from(name),
-            num_ports: 1,
-            receive_buf: vec![VecDeque::new()],
-            send_buf: vec![VecDeque::new()],
-            kind: DeviceKind::Host,
-        }
-    }
-
-    pub fn new_hub(mac: usize, name: &str, num_ports: usize, store_size: usize) -> Device {
+    pub fn new(mac: usize, name: &str, num_ports: usize, device_fn: Box<dyn DeviceFn>) -> Device {
         Device {
             mac,
             name: String::from(name),
             num_ports,
             receive_buf: vec![VecDeque::new(); num_ports],
             send_buf: vec![VecDeque::new(); num_ports],
-            kind: DeviceKind::Hub(Hub { store_size } ),
+            device_fn,
         }
+    }
+
+    pub fn new_host(mac: usize, name: &str) -> Device {
+        Self::new(mac, name, 1, Box::new(Host {  }))
+    }
+
+    pub fn new_hub(mac: usize, name: &str, num_ports: usize, store_size: usize) -> Device {
+        Self::new(mac, name, num_ports, Box::new(Hub { store_size }))
     }
 
     fn error(&self, kind: DeviceErrorKind) -> DeviceError {
@@ -78,40 +105,31 @@ impl Device {
     }
 
     pub fn update(&mut self) -> Res<()> {
-        match &self.kind {
-            DeviceKind::Host => self.update_host(),
-            DeviceKind::Hub(_)  => self.update_hub()
-        }
-    }
-
-    fn update_host(&mut self) -> Res<()> {
-        // if let Some(x) = self.receive_buf[0].pop_front() {
-        //     println!("Received: {}", x);
-        // }
-        Ok(())
-    }
-
-    fn update_hub(&mut self) -> Res<()> {
-        let h = match &self.kind {
-            DeviceKind::Hub(h) => h,
-            _ => panic!("Not a hub")
-        };
         for port in 0..self.num_ports {
-            let rlen = self.receive_buf[port].len();
-            if rlen >= h.store_size {
-                for p2 in 0..self.num_ports {
-                    if p2 != port {
-                        for _ in 0..rlen {
-                            let x = self.receive_buf[port].pop_front().unwrap();
-                            self.send_buf[p2].push_back(x);
-                        }
+			// let rbuf = &self.receive_bufs[port];
+            // FIXME: avoid clone
+            let rbuf = self.receive_buf[port].clone();
+			let res = {
+                let mac = self.mac;
+                let np = self.num_ports;
+                let dfn = &mut self.device_fn;
+                dfn.apply(mac, np, port, &rbuf)?
+            };
+			if !res.is_empty() {
+				self.receive_buf[port].clear();
+                for (port, sbuf) in res {
+                    for b in sbuf {
+                        self.send_buf[port].push_back(b);
                     }
                 }
-            }
-        }
+			}
+            // FIXME: avoid clone
+            self.receive_buf[port] = rbuf.clone();
+		}
         Ok(())
     }
 
+    // FIXME: impl in host
     pub fn push_to_send(&mut self, port: usize, bytes: &[u8]) -> Res<()> {
         self.check_port(port)?;
         for b in bytes {

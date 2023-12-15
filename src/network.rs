@@ -3,7 +3,7 @@ use std::fmt;
 use crate::device::{Device, DeviceError, self};
 
 pub struct Network {
-    devices: Vec<Device>,
+    devices: Vec<Box<Device>>,
     medias: Vec<Media>
 }
 
@@ -53,7 +53,7 @@ impl Network {
     }
 
     pub fn add_device(&mut self, device: Device) {
-        self.devices.push(device);
+        self.devices.push(Box::new(device));
     }
 
     fn find_device(&self, mac: usize) -> Res<(usize, &Device)> {
