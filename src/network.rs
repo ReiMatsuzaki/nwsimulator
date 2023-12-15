@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, collections::VecDeque};
 
 use crate::device::{Device, DeviceError, self};
 
@@ -74,7 +74,6 @@ impl Network {
         Ok(())
     }
 
-
     pub fn start(&mut self, max_t: usize) -> Res<()> {
         println!("t");
         for t in 0..max_t {
@@ -105,9 +104,20 @@ impl Network {
         }
         Ok(())
     }    
+
+    pub fn get_receive_buf(&self, mac: usize, port: usize) -> Res<&VecDeque<u8>> {
+        let (_, d) = self.find_device(mac)?;
+        d.get_receive_buf(port)
+            .map_err(|e| NetworkError{kind: NetworkErrorKind::DeviceError(e)})
+    }
 }
 
 pub fn run_main() -> Res<()> {
+    run_1hub_2host()?;
+    Ok(())
+}
+
+fn run_1hub_2host() -> Res<VecDeque<u8>> {
     let mut nw = Network::new();
     let mac_host_a = 1011;
     let mac_host_b = 1012;
@@ -123,5 +133,20 @@ pub fn run_main() -> Res<()> {
     nw.connect(mac_host_b, 0, mac_hub, 1)?;
 
     nw.start(10)?;
-    Ok(())
+
+    let rbuf = nw.get_receive_buf(mac_host_b, 0)?;
+    println!("host b received:");
+    println!("{:?}", rbuf.iter().map(|x| *x as char).collect::<String>());
+    Ok(rbuf.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hub_nw() {
+        let rbuf = run_1hub_2host().unwrap();
+        assert_eq!(rbuf, b"Hell");
+    }
 }
