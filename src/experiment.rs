@@ -1,25 +1,10 @@
 use std::collections::VecDeque;
 
+pub mod types;
 pub mod linkl;
+pub mod interl;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Mac(u64);
-
-impl Mac {
-    fn new(value: u64) -> Mac {
-        Mac(value)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Port(u32);
-
-impl Port {
-    fn new(value: u32) -> Port {
-        Port(value)
-    }
-}
-
+use types::*;
 type PortByteQue = VecDeque<(Port, u8)>;
 
 pub struct Media {
@@ -137,7 +122,7 @@ impl Connectable for Repeater {
 
     fn update(&mut self, _ctx: &UpdateContext) {
         while let Some((p, x)) = self.base.pop_received() {
-            self.base.push_sending((Port::new(1-p.0), x));
+            self.base.push_sending((Port::new(1-p.value()), x));
         }
     }
 }

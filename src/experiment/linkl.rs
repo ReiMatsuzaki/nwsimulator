@@ -1,12 +1,12 @@
 use std::collections::{VecDeque, HashMap};
 
 use crate::linkl::ethernet_frame::EthernetFrame;
+use super::types::{Port, Mac};
+use super::{BaseByteDevice, Connectable, UpdateContext};
 
-use super::{BaseByteDevice, Connectable, Mac, Port, UpdateContext};
-
-struct BaseEthernetDevice {
-    rbuf: VecDeque<EthernetFrame>,
-    sbuf: VecDeque<EthernetFrame>,
+pub struct BaseEthernetDevice {
+    pub rbuf: VecDeque<EthernetFrame>,
+    pub sbuf: VecDeque<EthernetFrame>,
     forward_table: HashMap<Mac, Port>,
     base: BaseByteDevice,
 }
@@ -24,7 +24,6 @@ impl BaseEthernetDevice {
     pub fn receive_update(&mut self) {
         // FIXME: store xs
         // from self.base.rbuf encode frame and push to self.rbug
-        // this execution is for each port
         let mut xs = vec![];
         while let Some((port, x)) = self.base.pop_received() {
             if port == Port::new(0) {
