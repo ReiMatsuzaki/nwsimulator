@@ -1,10 +1,12 @@
 use std::collections::VecDeque;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Mac(u32);
+pub mod linkl;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Mac(u64);
 
 impl Mac {
-    fn new(value: u32) -> Mac {
+    fn new(value: u64) -> Mac {
         Mac(value)
     }
 }
@@ -28,11 +30,11 @@ pub struct Media {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct UpdateContext {
+pub struct UpdateContext {
     t: usize,
 }
 use std::any::Any;
-trait Connectable {
+pub trait Connectable {
     fn get_mac(&self) -> Mac;
     fn get_name(&self) -> &str;
     fn get_num_ports(&self) -> usize;
@@ -42,7 +44,7 @@ trait Connectable {
     fn update(&mut self, _ctx: &UpdateContext);
 }
 
-struct BaseByteDevice {
+pub struct BaseByteDevice {
     mac: Mac,
     name: String,
     num_ports: usize,
@@ -134,8 +136,8 @@ impl Connectable for Repeater {
     }
 
     fn update(&mut self, _ctx: &UpdateContext) {
-        while let Some(x) = self.base.pop_received() {
-            self.base.push_sending(x);
+        while let Some((p, x)) = self.base.pop_received() {
+            self.base.push_sending((Port::new(1-p.0), x));
         }
     }
 }
@@ -289,7 +291,7 @@ pub fn run_sample() {
     nw.connect_both(mac0, Port::new(1), mac2, Port::new(0)).unwrap();
     nw.run(10).unwrap();
 
-    let d = nw.get_device(mac1).unwrap();
+    let d = nw.get_device(mac2).unwrap();
     let d = d.as_any().downcast_ref::<ByteHost>().unwrap();
     println!("{:?}", d.receives);
 }
