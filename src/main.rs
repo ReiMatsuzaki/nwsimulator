@@ -1,6 +1,7 @@
 mod output;
 mod physl;
 mod linkl;
+mod experiment;
 
 
 use std::io;
@@ -25,6 +26,7 @@ fn main() -> io::Result<()> {
         // 2 => linkl::ethernet_frame::run_linkl_sample(),
         2 => { linkl::run_linkl_sample2().unwrap(); },
         3 => { linkl::run_sample_ethernet_switch().unwrap(); } ,
+        10 => { experiment::run_sample();}
         _ => println!("No such run number"),
     }
 
