@@ -32,18 +32,21 @@ pub struct IpAddr {
 
 #[derive(Debug)]
 pub enum Error {
+    NotEnoughBytes,
     // InvalidPort {mac: Mac, name: String, port: Port, msg: String},
     DeviceNotFound { mac: Mac },
     // DecodeFailed { payload: Vec<u8>, msg: String },
     NetworkConnectFailed { mac0: Mac, mac1: Mac, msg: String },
-    ConnectionNotFound { mac: Mac, port: Port }
+    ConnectionNotFound { mac: Mac, port: Port },
     // LinklError { e: LinklError },
-    // InvalidBytes,
+    InvalidBytes { msg: String },
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Error::NotEnoughBytes => 
+                write!(f, "Not enough byte"),
             // Error::InvalidPort { mac, name, port, msg } =>
             //     write!(f, "Invalid port on device {}({}). port={}, msg={}", name, mac.value, port.value, msg),
             Error::DeviceNotFound {mac} =>
@@ -56,8 +59,8 @@ impl fmt::Display for Error {
                 write!(f, "Connection not found: mac={}, port={}", mac.value, port.value),
                 // Error::LinklError {e} => 
                 // write!(f, "LinklError: {:?}", e),
-            // PhyslError::InvalidBytes => 
-            //     write!(f, "InvalidBytes"),
+            Error::InvalidBytes { msg } => 
+                write!(f, "Invalid bytes, {}", msg),
         }
     }
 }

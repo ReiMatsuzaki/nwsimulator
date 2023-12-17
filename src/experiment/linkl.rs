@@ -1,10 +1,112 @@
 use std::collections::{VecDeque, HashMap};
 
-use super::types::{Port, Mac, Res};
+use super::types::{Port, Mac, Res, Error};
 use super::physl::{BaseDevice, Device, UpdateContext, Network};
-use crate::linkl::ethernet_frame::EthernetFrame;
 
 type Handler = dyn Fn(EthernetFrame) -> Res<Vec<EthernetFrame>>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EthernetFrame {
+    pub dst: u64,       // 6 bytes
+    pub src: u64,       // 6 bytes
+    pub ethertype: u16, // 2 bytes
+    pub payload: Vec<u8>,
+}
+
+impl EthernetFrame {
+    pub fn new(dst: u64, src: u64, ethertype: u16, payload: Vec<u8>) -> EthernetFrame {
+        EthernetFrame {
+            dst,
+            src,
+            ethertype,
+            payload,
+        }
+    }
+
+    pub fn decode(xs: &Vec<u8>) -> Res<EthernetFrame> {
+        if xs.len() < 8 + 6 + 6 + 2 {
+            return Err(Error::NotEnoughBytes);
+        }
+        for i in 0..7 {
+            if xs[i] != 0xAA {
+                // 10101010 = 0xAA
+                return Err(Error::InvalidBytes {
+                    msg: "bad preamble".to_string(),
+                });
+            }
+        }
+        if xs[7] != 0xAB {
+            // 10101011 = 0xAB
+            return Err(Error::InvalidBytes {
+                msg: "bad preamble".to_string(),
+            });
+        }
+        let dst = read_6bytes(xs, 8);
+        let src = read_6bytes(xs, 8 + 6);
+        let ty = read_2bytes(xs, 8 + 6 + 6);
+        if ty > 0x05DC {
+            return Err(Error::InvalidBytes {
+                msg: format!("unsupported ethernet type: {}", ty),
+            });
+        } else {
+            // type is length
+            let len = ty as usize;
+            if xs.len() < 8 + 6 + 6 + 2 + len {
+                return Err(Error::NotEnoughBytes);
+            }
+            let payload = Vec::from(&xs[(8 + 6 + 6 + 2)..(8 + 6 + 6 + 2 + len)]);
+            Ok(EthernetFrame {
+                dst,
+                src,
+                ethertype: ty,
+                payload,
+            })
+        }
+    }
+
+    pub fn encode(frame: &EthernetFrame) -> Vec<u8> {
+        let et = split_2bytes(frame.ethertype);
+        let dst = split_6bytes(frame.dst);
+        let src = split_6bytes(frame.src);
+        let mut xs = vec![
+            0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAB, // preamble
+            dst[0], dst[1], dst[2], dst[3], dst[4], dst[5], src[0], src[1], src[2], src[3], src[4],
+            src[5], et[0], et[1],
+        ];
+        // FIXME: avoid clone
+        xs.append(&mut frame.payload.clone());
+        xs
+    }
+}
+
+fn read_2bytes(xs: &Vec<u8>, offset: usize) -> u16 {
+    (xs[offset] as u16) << 8 | (xs[offset + 1] as u16)
+}
+
+fn read_6bytes(xs: &Vec<u8>, offset: usize) -> u64 {
+    (xs[offset] as u64) << 40
+        | (xs[offset + 1] as u64) << 32
+        | (xs[offset + 2] as u64) << 24
+        | (xs[offset + 3] as u64) << 16
+        | (xs[offset + 4] as u64) << 8
+        | (xs[offset + 5] as u64)
+}
+
+fn split_2bytes(x: u16) -> [u8; 2] {
+    [(x >> 8) as u8, (x & 0xFF) as u8]
+}
+
+fn split_6bytes(x: u64) -> [u8; 6] {
+    [
+        (x >> 40) as u8,
+        ((x >> 32) & 0xFF) as u8,
+        ((x >> 24) & 0xFF) as u8,
+        ((x >> 16) & 0xFF) as u8,
+        ((x >> 8) & 0xFF) as u8,
+        (x & 0xFF) as u8,
+    ]
+}
+
 
 pub struct BaseEthernetDevice {
     pub rbuf: VecDeque<EthernetFrame>,
@@ -41,17 +143,23 @@ impl BaseEthernetDevice {
                 self.bufs.insert(port, vec![x]);
             }
 
-            if let Some(xs) = self.bufs.get(&port) {
-                // FIXME: violated bytes are not consumed
-                if let Ok(frame) = EthernetFrame::decode(xs) {
-                    if disp {
-                        print!("{:>2}: ", ctx.t);
-                        println!("{}({}): receive: {:?}", self.base.get_name(), self.base.get_mac().value, frame);
+            if let Some(xs) = self.bufs.get_mut(&port) {
+                match EthernetFrame::decode(xs) {
+                    Ok(frame) => {
+                        if disp {
+                            print!("{:>2}: ", ctx.t);
+                            println!("{}({}): receive: {:?}", self.base.get_name(), self.base.get_mac().value, frame);
+                        }
+                        self.rlog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
+    
+                        self.forward_table.insert(Mac::new(frame.src), port);
+                        self.rbuf.push_back(frame);
+                        xs.clear();
+                    },
+                    Err(Error::NotEnoughBytes) => {}, // do nothing
+                    Err(_) => {
+                        xs.clear(); // clear illegal bytes
                     }
-                    self.rlog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
-
-                    self.forward_table.insert(Mac::new(frame.src), port);
-                    self.rbuf.push_back(frame);
                 }
             }
         }
