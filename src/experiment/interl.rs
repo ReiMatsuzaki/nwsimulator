@@ -156,11 +156,11 @@ impl IpHost {
 }
 
 impl Device for IpHost {
-    fn base(&self) -> &super::physl::BaseByteDevice {
+    fn base(&self) -> &super::physl::BaseDevice {
         &self.base.base.base()
     }
 
-    fn base_mut(&mut self) -> &mut super::physl::BaseByteDevice {
+    fn base_mut(&mut self) -> &mut super::physl::BaseDevice {
         &mut self.base.base.base
     }
 

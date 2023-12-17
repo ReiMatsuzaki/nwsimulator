@@ -15,9 +15,9 @@ pub struct UpdateContext {
 }
 
 pub trait Device {
-    fn base(&self) -> &BaseByteDevice;
+    fn base(&self) -> &BaseDevice;
 
-    fn base_mut(&mut self) -> &mut BaseByteDevice;
+    fn base_mut(&mut self) -> &mut BaseDevice;
 
     fn get_mac(&self) -> Mac {
         self.base().mac
@@ -44,7 +44,7 @@ pub trait Device {
     fn update(&mut self, _ctx: &UpdateContext);
 }
 
-pub struct BaseByteDevice {
+pub struct BaseDevice {
     mac: Mac,
     name: String,
     num_ports: usize,
@@ -52,9 +52,9 @@ pub struct BaseByteDevice {
     sbuf: VecDeque<(Port, u8)>,
 }
 
-impl BaseByteDevice {
-    pub fn new(mac: Mac, name: &str, num_ports: usize) -> BaseByteDevice {
-        BaseByteDevice {
+impl BaseDevice {
+    pub fn new(mac: Mac, name: &str, num_ports: usize) -> BaseDevice {
+        BaseDevice {
             mac,
             name: name.to_string(),
             num_ports,
@@ -73,21 +73,21 @@ impl BaseByteDevice {
 }
 
 struct Repeater {
-    base: BaseByteDevice,
+    base: BaseDevice,
 }
 impl Repeater {
     pub fn new(mac: Mac, name: &str) -> Repeater {
         Repeater {
-            base: BaseByteDevice::new(mac, name, 2),
+            base: BaseDevice::new(mac, name, 2),
         }
     }
 }
 impl Device for Repeater {
-    fn base(&self) -> &BaseByteDevice {
+    fn base(&self) -> &BaseDevice {
         &self.base
     }
 
-    fn base_mut(&mut self) -> &mut BaseByteDevice {
+    fn base_mut(&mut self) -> &mut BaseDevice {
         &mut self.base
     }
 
@@ -110,25 +110,25 @@ pub struct ByteLog {
 }
 
 struct ByteHost {
-    base: BaseByteDevice,
+    base: BaseDevice,
     schedules: Vec<ByteLog>,
     receives: Vec<ByteLog>,
 }
 impl ByteHost {
     pub fn new(mac: Mac, name: &str, schedules: Vec<ByteLog>) -> ByteHost {
         ByteHost {
-            base: BaseByteDevice::new(mac, name, 1),
+            base: BaseDevice::new(mac, name, 1),
             schedules,
             receives: Vec::new(),
         }
     }
 }
 impl Device for ByteHost {
-    fn base(&self) -> &BaseByteDevice {
+    fn base(&self) -> &BaseDevice {
         &self.base
     }
 
-    fn base_mut(&mut self) -> &mut BaseByteDevice {
+    fn base_mut(&mut self) -> &mut BaseDevice {
         &mut self.base
     }
 
@@ -150,12 +150,12 @@ impl Device for ByteHost {
 
 pub struct Network {
     devices: Vec<Box<dyn Device>>,
-    medias: Vec<Connection>,
+    connections: Vec<Connection>,
 }
 
 impl Network {
     pub fn new(devices: Vec<Box<dyn Device>>, medias: Vec<Connection>) -> Network {
-        Network { devices, medias }
+        Network { devices, connections: medias }
     }
 
     fn connect(&mut self, mac0: Mac, port0: Port, mac1: Mac, port1: Port) -> Res<()> {
@@ -170,7 +170,7 @@ impl Network {
             return Err(Error::NetworkConnectFailed { mac0, mac1, msg: "same mac address".to_string() })
         }
 
-        self.medias.push(Connection {
+        self.connections.push(Connection {
             mac0,
             port0,
             mac1,
@@ -192,38 +192,46 @@ impl Network {
             .ok_or(Error::DeviceNotFound { mac })
     }
 
-    fn step(&mut self, t: usize) -> Res<()> {
+    fn find_connection(&self, mac: Mac, port: Port) -> Res<(Mac, Port)> {
+        self.connections.iter()
+        .find(|c| c.mac0 == mac && c.port0 == port)
+        .map(|c| (c.mac1, c.port1))
+        .ok_or(Error::ConnectionNotFound { mac, port })
+    }
+
+    fn update(&mut self, t: usize) -> Res<()> {
+        let disp = crate::output::is_byte_level();
+        if disp {
+            print!("{:>2}: ", t);
+        }
         for idx in 0..self.devices.len() {
             let d = &mut self.devices[idx];
             if let Some((src_port, x)) = d.send() {
                 let src_mac = d.get_mac();
-                println!("send from {:?}:{:?} x {:?}", d.get_mac(), src_port, x);
-
-                if let Some(m) = self.medias.iter().find(|m| 
-                    m.mac0 == src_mac &&
-                    m.port0 == src_port
-                ) {
-                    println!("receive to {:?}:{:?}", m.mac1, m.port1);
-                    let mac1 = m.mac1;
-                    let port1 = m.port1;
-                    self.get_device(mac1)?
-                    .receive(port1, x);
-                } else {
-                    println!("media not found");
+                let (dst_mac, dst_port) = self.find_connection(src_mac, src_port)?;
+                if disp {
+                    print!("{:}:{:} -> {:}:{:} : 0x{:0>2X}     ", 
+                           src_mac.value, src_port.value,
+                           dst_mac.value, dst_port.value,
+                           x);
                 }
+                self.get_device(dst_mac)?
+                .receive(dst_port, x);
             }
         }
-
         for d in &mut self.devices {
             let ctx = UpdateContext { t };
             d.update(&ctx);
+        }
+        if disp {
+            println!("");
         }
         Ok(())
     }
 
     pub fn run(&mut self, maxt: usize) -> Res<()> {
         for t in 0..maxt {
-            self.step(t)?;
+            self.update(t)?;
         }
         Ok(())
     }

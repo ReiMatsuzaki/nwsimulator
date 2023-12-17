@@ -36,6 +36,7 @@ pub enum Error {
     DeviceNotFound { mac: Mac },
     DecodeFailed { payload: Vec<u8>, msg: String },
     NetworkConnectFailed { mac0: Mac, mac1: Mac, msg: String },
+    ConnectionNotFound { mac: Mac, port: Port }
     // LinklError { e: LinklError },
     // InvalidBytes,
 }
@@ -51,7 +52,9 @@ impl fmt::Display for Error {
                 write!(f, "Decode failed: {}. payload={:?}", msg, payload),
             Error::NetworkConnectFailed { mac0, mac1, msg } =>
                 write!(f, "Network connect faild: {} - {}. {}", mac0.value, mac1.value, msg),
-            // Error::LinklError {e} => 
+            Error::ConnectionNotFound { mac, port } =>
+                write!(f, "Connection not found: mac={}, port={}", mac.value, port.value),
+                // Error::LinklError {e} => 
                 // write!(f, "LinklError: {:?}", e),
             // PhyslError::InvalidBytes => 
             //     write!(f, "InvalidBytes"),

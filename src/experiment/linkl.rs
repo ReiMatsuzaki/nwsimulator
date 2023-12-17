@@ -1,7 +1,7 @@
 use std::collections::{VecDeque, HashMap};
 
 use super::types::{Port, Mac};
-use super::physl::{BaseByteDevice, Device, UpdateContext, Network};
+use super::physl::{BaseDevice, Device, UpdateContext, Network};
 use crate::linkl::ethernet_frame::EthernetFrame;
 
 
@@ -9,7 +9,7 @@ pub struct BaseEthernetDevice {
     pub rbuf: VecDeque<EthernetFrame>,
     pub sbuf: VecDeque<EthernetFrame>,
     forward_table: HashMap<Mac, Port>,
-    pub base: BaseByteDevice,
+    pub base: BaseDevice,
 }
 
 impl BaseEthernetDevice {
@@ -18,7 +18,7 @@ impl BaseEthernetDevice {
             rbuf: VecDeque::new(),
             sbuf: VecDeque::new(),
             forward_table: HashMap::new(),
-            base: BaseByteDevice::new(mac, name, num_ports),
+            base: BaseDevice::new(mac, name, num_ports),
         }
     }
 
@@ -67,11 +67,11 @@ impl BaseEthernetDevice {
 }
 
 impl Device for BaseEthernetDevice {
-    fn base(&self) -> &BaseByteDevice {
+    fn base(&self) -> &BaseDevice {
         &self.base
     }
 
-    fn base_mut(&mut self) -> &mut BaseByteDevice {
+    fn base_mut(&mut self) -> &mut BaseDevice {
         &mut self.base
     }
 
@@ -96,11 +96,11 @@ impl Bridge {
 }
 
 impl Device for Bridge {
-    fn base(&self) -> &BaseByteDevice {
+    fn base(&self) -> &BaseDevice {
         &self.base.base
     }
 
-    fn base_mut(&mut self) -> &mut BaseByteDevice {
+    fn base_mut(&mut self) -> &mut BaseDevice {
         &mut self.base.base
     }
 
