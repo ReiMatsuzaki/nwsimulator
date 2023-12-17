@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 use crate::linkl::ethernet_frame::EthernetFrame;
 
-use super::{UpdateContext, Connectable, Network};
+use super::physl::{UpdateContext, Connectable, Network};
 use super::types::{Port, Mac, IpAddr, Res, Error};
 use super::linkl::BaseEthernetDevice;
 

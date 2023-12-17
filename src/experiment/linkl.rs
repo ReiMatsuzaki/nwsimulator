@@ -1,8 +1,9 @@
 use std::collections::{VecDeque, HashMap};
 
-use crate::linkl::ethernet_frame::EthernetFrame;
 use super::types::{Port, Mac};
-use super::{BaseByteDevice, Connectable, UpdateContext};
+use super::physl::{BaseByteDevice, Connectable, UpdateContext, Network};
+use crate::linkl::ethernet_frame::EthernetFrame;
+
 
 pub struct BaseEthernetDevice {
     pub rbuf: VecDeque<EthernetFrame>,
@@ -45,7 +46,7 @@ impl BaseEthernetDevice {
             // FIXME: chose port using forward table
             if let Some(port) = self.forward_table.get(&Mac::new(frame.dst)) {
                 for byte in bytes {
-                    self.base.sbuf.push_back((*port, byte));
+                    self.base.push_sending((*port, byte));
                 }
             } else {
                 panic!("unknown mac address");
@@ -152,7 +153,7 @@ pub fn run_sample() {
     let bridge0 = Bridge::new(mac0, "bridge0");
     let bridge1 = Bridge::new(mac1, "bridge1");
 
-    let mut nw = super::Network::new(
+    let mut nw = Network::new(
         vec![bridge0, bridge1],
         vec![]
     );

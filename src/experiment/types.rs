@@ -41,7 +41,7 @@ impl IpAddr {
 #[derive(Debug)]
 pub enum Error {
     // InvalidPort {mac: Mac, name: String, port: Port},
-    // DeviceNotFound { mac: Mac },
+    DeviceNotFound { mac: Mac },
     DecodeFailed { payload: Vec<u8>, msg: String }
     // LinklError { e: LinklError },
     // InvalidBytes,
@@ -52,8 +52,8 @@ impl fmt::Display for Error {
         match self {
             // Error::InvalidPort { mac, name, port } =>
             //     write!(f, "Error on device {}({}). Invalid Port: {}", name, mac.value(), port.value()),
-            // Error::DeviceNotFound {mac} =>
-            //     write!(f, "Device not found: {}", mac.value()),
+            Error::DeviceNotFound {mac} =>
+                write!(f, "Device not found: {}", mac.value()),
             Error::DecodeFailed { payload, msg } => 
             write!(f, "Decode failed: {}. payload={:?}", msg, payload),
             // Error::LinklError {e} => 
