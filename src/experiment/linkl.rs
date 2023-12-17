@@ -130,6 +130,7 @@ impl BaseEthernetDevice {
                     },
                     Err(Error::NotEnoughBytes) => {}, // do nothing
                     Err(_) => {
+                        println!("{}({}): invalid frame. clear bytes", self.base.get_name(), self.base.get_mac().value);
                         xs.clear(); // clear illegal bytes
                     }
                 }
@@ -187,6 +188,10 @@ impl BaseEthernetDevice {
             }
         }
         Ok(())
+    }
+
+    pub fn add_forwarding_table(&mut self, dst: Mac, port: Port) {
+        self.forward_table.insert(dst, port);
     }
 }
 

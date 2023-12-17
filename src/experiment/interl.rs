@@ -1,147 +1,133 @@
-// use super::linkl::
+pub mod ip_addr;
+pub mod ip;
+pub mod arp;
 
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 
-use crate::linkl::ethernet_frame::EthernetFrame;
-
+use super::types::{Port, Mac, Res, Error};
 use super::physl::{UpdateContext, Device, Network};
-use super::types::{Port, Mac, IpAddr, Res, Error};
-use super::linkl::BaseEthernetDevice;
+use super::linkl::{BaseEthernetDevice, EthernetFrame};
+
+use ip_addr::*;
+use ip::*;
+use arp::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IP {
-    // FIXME: more fields
-    pub src: IpAddr,
-    pub dst: IpAddr,
-}
-
-impl IP {
-    pub fn decode(xs: &[u8]) -> Result<IP, ()> {
-        if xs.len() < 8 {
-            return Err(());
-        }
-        let src = (xs[0] as u32) << 24 | (xs[1] as u32) << 16 | (xs[2] as u32) << 8 | (xs[3] as u32);
-        let dst = (xs[4] as u32) << 24 | (xs[5] as u32) << 16 | (xs[6] as u32) << 8 | (xs[7] as u32);
-        Ok(IP { src: IpAddr::new(src), dst: IpAddr::new(dst) })
-    }
-
-    pub fn encode(&self) -> Vec<u8> {
-        let mut xs = vec![];
-        xs.push((self.src.value >> 24) as u8);
-        xs.push((self.src.value >> 16) as u8);
-        xs.push((self.src.value >> 8) as u8);
-        xs.push(self.src.value as u8);
-        xs.push((self.dst.value >> 24) as u8);
-        xs.push((self.dst.value >> 16) as u8);
-        xs.push((self.dst.value >> 8) as u8);
-        xs.push(self.dst.value as u8);
-        xs
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ARP {
-    src_mac: Mac,
-    src_ipaddr: IpAddr,
-    dst_ipaddr: IpAddr,
-}
-
-impl ARP {
-    pub fn decode(xs: &[u8]) -> Result<ARP, ()> {
-        if xs.len() < 8 {
-            return Err(());
-        }
-        let src = (xs[0] as u32) << 24 | (xs[1] as u32) << 16 | (xs[2] as u32) << 8 | (xs[3] as u32);
-        let dst = (xs[4] as u32) << 24 | (xs[5] as u32) << 16 | (xs[6] as u32) << 8 | (xs[7] as u32);
-        Ok(ARP { 
-            src_mac: Mac::new(0),
-            src_ipaddr: IpAddr::new(src), 
-            dst_ipaddr: IpAddr::new(dst),
-         })
-    }
-
-    pub fn encode(&self) -> Vec<u8> {    
-        // FIXME
-        vec![self.src_mac.value as u8,
-        self.src_ipaddr.value as u8,
-        self.dst_ipaddr.value as u8
-        ]
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Protocol {
+pub enum NetworkProtocol {
     IP(IP),
     ARP(ARP),
 }
 
-impl Protocol {
-    pub fn encode(&self) -> Vec<u8> {
-        match self {
-            Protocol::IP(ip) => ip.encode(),
-            Protocol::ARP(arp) => arp.encode(),
-        }
-    }
-}
+// impl NetworkProtocol {
+//     pub fn encode(&self) -> Vec<u8> {
+//         match self {
+//             NetworkProtocol::IP(ip) => ip.encode(),
+//             NetworkProtocol::ARP(arp) => arp.encode(),
+//         }
+//     }
+// }
 
 pub struct BaseIpDevice {
-    rbuf: VecDeque<Protocol>,
-    sbuf: VecDeque<Protocol>,
+    rbuf: VecDeque<NetworkProtocol>,
+    // sbuf: VecDeque<Protocol>,
     pub base: BaseEthernetDevice,
+
+    subnet_mask: SubnetMask,
+    ip_addr_ports: Vec<(IpAddr, Port)>,
+    routing_table: HashMap<NetworkPart, IpAddr>,
+    arp_table: HashMap<IpAddr, Mac>,
 }
 
 impl BaseIpDevice {
     pub fn new(mac: Mac, name: &str, num_ports: usize) -> BaseIpDevice {
         BaseIpDevice {
             rbuf: VecDeque::new(),
-            sbuf: VecDeque::new(),
+            // sbuf: VecDeque::new(),
             base: BaseEthernetDevice::new(mac, name, num_ports),
+            subnet_mask: SubnetMask::new(24),
+            ip_addr_ports: vec![],
+            routing_table: HashMap::new(),
+            arp_table: HashMap::new(),
         }
     }
 
-    pub fn encode(&mut self) -> Res<()> {
+    pub fn pop_rbuf(&mut self) -> Res<Option<NetworkProtocol>> {
+        // FIXME: add output
+        // FIXME: update route table
         while let Some(frame) = self.base.rbuf.pop_front() {
             if let Ok(ip) = IP::decode(&frame.payload) {
-                self.rbuf.push_back(Protocol::IP(ip));
+                self.rbuf.push_back(NetworkProtocol::IP(ip));
             } else if let Ok(arp) = ARP::decode(&frame.payload) {
-                self.rbuf.push_back(Protocol::ARP(arp));
+                self.rbuf.push_back(NetworkProtocol::ARP(arp));
             } else {
-                return Err(Error::DecodeFailed { 
-                    payload: frame.payload, 
-                    msg: "IP".to_string() });
+                return Err(Error::InvalidBytes { msg: "IP".to_string() })
             }
         }
+        Ok(self.rbuf.pop_front())
+    }
+
+    pub fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext) -> Res<()> {
+        let p = match p {
+            NetworkProtocol::IP(ip) => ip,
+            NetworkProtocol::ARP(_) => panic!("ARP is not supported yet"),
+        };
+
+        // FIXME: how to determine src_ip here ?
+
+        let dst_nw_part = NetworkPart::build(p.dst, self.subnet_mask);
+        let dst_mac = if let Some(port) = self.find_port(&dst_nw_part) {
+            // dst is in same network
+            if let Some(dst_mac) = self.arp_table.get(&p.dst) {
+                self.base.add_forwarding_table(*dst_mac, port);
+                dst_mac
+            } else {
+                panic!("failed to find in arp table");
+            }
+        } else if let Some(dst_ip) = self.routing_table.get(&dst_nw_part) {
+            if let Some(dst_mac) = self.arp_table.get(dst_ip) {
+                dst_mac
+            } else {
+                panic!("failed to find in arp table");
+            }
+        } else {
+            panic!("failed to find dst_nw_part. dst_nw_part={:X}", dst_nw_part.get_value());
+        };
+
+        let src_mac = self.base.base.get_mac();
+        let payload = p.encode();
+        let ethertype = payload.len() as u16;
+        let frame = EthernetFrame::new(*dst_mac, src_mac, ethertype, payload);
+        self.base.push_sbuf(frame, ctx);
+
         Ok(())
     }
 
-    pub fn decode(&mut self) {
-        // FIXME
-        while let Some(p) = self.sbuf.pop_front() {
-            let payload = p.encode();
-            let frame = EthernetFrame::new(0, 0, 0, payload);
-            self.base.sbuf.push_back(frame);
-        }
-
+    fn find_port(&self, nw_part: &NetworkPart) -> Option<Port> {
+        self.ip_addr_ports
+        .iter()
+        .find(|(ip_addr, _)| {
+            NetworkPart::build(*ip_addr, self.subnet_mask) == *nw_part
+        })
+        .map(|(_, port)| *port)
     }
 
-    pub fn update(&mut self, _ctx: &UpdateContext, 
-                  f: &mut dyn FnMut(Protocol) -> Vec<Protocol>) -> Res<()> {
-        self.encode()?;
-        while let Some(p) = self.rbuf.pop_front() {
+    pub fn update(&mut self, ctx: &UpdateContext, f: &mut Handler) -> Res<()> {
+        while let Some(p) = self.pop_rbuf()? {
             let response_list = f(p);
             for p in response_list {
-                self.sbuf.push_back(p)
+                self.push_sbuf(p, ctx)?;
             }
         }
-        self.decode();
         Ok(())
     }
 }
 
+type Handler = dyn FnMut(NetworkProtocol) -> Vec<NetworkProtocol>;
+
 pub struct IpHost {
     base: BaseIpDevice,
-    schedules: Vec<(usize, Protocol)>,
-    receives: Vec<(usize, Protocol)>,
+    schedules: Vec<(usize, NetworkProtocol)>,
+    // receives: Vec<(usize, NetworkProtocol)>,
 }
 
 impl IpHost {
@@ -149,7 +135,7 @@ impl IpHost {
         let host = IpHost {
             base: BaseIpDevice::new(mac, name, num_ports),
             schedules: vec![],
-            receives: vec![],
+            // receives: vec![],
         };
         Box::new(host)
     }
@@ -157,7 +143,7 @@ impl IpHost {
 
 impl Device for IpHost {
     fn base(&self) -> &super::physl::BaseDevice {
-        &self.base.base.base()
+        &self.base.base.base
     }
 
     fn base_mut(&mut self) -> &mut super::physl::BaseDevice {
@@ -168,18 +154,17 @@ impl Device for IpHost {
         self
     }
 
-    fn update(&mut self, ctx: &UpdateContext) {
+    fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
         for (t, p) in self.schedules.iter() {
             if *t == ctx.t {
-                self.base.sbuf.push_back(p.clone());
+                self.base.push_sbuf(p.clone(), ctx)?;
             }
         }
-        let f = &mut |p: Protocol| {
-            self.receives.push((ctx.t, p.clone()));
+        let f = &mut |p: NetworkProtocol| {
+            // self.receives.push((ctx.t, p.clone()));
             vec![p]
         };
-        self.base.update(ctx, f).unwrap()
-
+        self.base.update(ctx, f)
     }
 }
 

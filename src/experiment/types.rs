@@ -19,17 +19,6 @@ impl Port {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct IpAddr {
-    pub value: u32,
-}
-
-// impl IpAddr {
-//     pub fn new(value: u32) -> IpAddr {
-//         IpAddr { value }
-//     }
-// }
-
 #[derive(Debug)]
 pub enum Error {
     NotEnoughBytes,
