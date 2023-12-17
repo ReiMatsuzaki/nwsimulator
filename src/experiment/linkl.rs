@@ -7,14 +7,14 @@ type Handler = dyn Fn(EthernetFrame) -> Res<Vec<EthernetFrame>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EthernetFrame {
-    pub dst: u64,       // 6 bytes
-    pub src: u64,       // 6 bytes
+    pub dst: Mac,       // 6 bytes
+    pub src: Mac,       // 6 bytes
     pub ethertype: u16, // 2 bytes
     pub payload: Vec<u8>,
 }
 
 impl EthernetFrame {
-    pub fn new(dst: u64, src: u64, ethertype: u16, payload: Vec<u8>) -> EthernetFrame {
+    pub fn new(dst: Mac, src: Mac, ethertype: u16, payload: Vec<u8>) -> EthernetFrame {
         EthernetFrame {
             dst,
             src,
@@ -41,8 +41,8 @@ impl EthernetFrame {
                 msg: "bad preamble".to_string(),
             });
         }
-        let dst = read_6bytes(xs, 8);
-        let src = read_6bytes(xs, 8 + 6);
+        let dst = Mac::new(read_6bytes(xs, 8));
+        let src = Mac::new(read_6bytes(xs, 8 + 6));
         let ty = read_2bytes(xs, 8 + 6 + 6);
         if ty > 0x05DC {
             return Err(Error::InvalidBytes {
@@ -66,8 +66,8 @@ impl EthernetFrame {
 
     pub fn encode(frame: &EthernetFrame) -> Vec<u8> {
         let et = split_2bytes(frame.ethertype);
-        let dst = split_6bytes(frame.dst);
-        let src = split_6bytes(frame.src);
+        let dst = split_6bytes(frame.dst.value);
+        let src = split_6bytes(frame.src.value);
         let mut xs = vec![
             0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAB, // preamble
             dst[0], dst[1], dst[2], dst[3], dst[4], dst[5], src[0], src[1], src[2], src[3], src[4],
@@ -106,7 +106,6 @@ fn split_6bytes(x: u64) -> [u8; 6] {
         (x & 0xFF) as u8,
     ]
 }
-
 
 pub struct BaseEthernetDevice {
     pub rbuf: VecDeque<EthernetFrame>,
@@ -152,7 +151,7 @@ impl BaseEthernetDevice {
                         }
                         self.rlog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
     
-                        self.forward_table.insert(Mac::new(frame.src), port);
+                        self.forward_table.insert(frame.src, port);
                         self.rbuf.push_back(frame);
                         xs.clear();
                     },
@@ -176,9 +175,9 @@ impl BaseEthernetDevice {
         }
 
         let mut ports = vec![];
-        if let Some(port) = self.forward_table.get(&Mac::new(frame.dst)) {
+        if let Some(port) = self.forward_table.get(&frame.dst) {
             ports.push(*port);
-        } else if let Some(src_port) = self.forward_table.get(&Mac::new(frame.src)) {
+        } else if let Some(src_port) = self.forward_table.get(&frame.src) {
             for port in 0..self.base.get_num_ports() {
                 if port != src_port.value as usize {
                     ports.push(Port::new(port as u32));
@@ -296,7 +295,7 @@ pub fn run_sample() -> Res<EthernetLog> {
     let host_b = EthernetDevice::build_host(mac1, "host_b");
     let brdige = EthernetDevice::build_bridge(mac2, "bridge");
 
-    let frame = EthernetFrame::new(mac1.value, mac0.value, 3, vec![11, 12, 13]);
+    let frame = EthernetFrame::new(mac1, mac0, 3, vec![11, 12, 13]);
     host_a.add_schedule(0, frame.clone());
 
     let mut nw = Network::new(
@@ -323,7 +322,7 @@ mod tests {
         let log = run_sample().unwrap();
         let mac0 = Mac::new(23);
         let mac1 = Mac::new(24);
-        let frame = EthernetFrame::new(mac1.value, mac0.value, 3, vec![11, 12, 13]);
+        let frame = EthernetFrame::new(mac1, mac0, 3, vec![11, 12, 13]);
         assert_eq!(frame, log.frame);
     }
 }
