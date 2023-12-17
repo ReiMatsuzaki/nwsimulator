@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 use crate::linkl::ethernet_frame::EthernetFrame;
 
-use super::physl::{UpdateContext, Connectable, Network};
+use super::physl::{UpdateContext, Device, Network};
 use super::types::{Port, Mac, IpAddr, Res, Error};
 use super::linkl::BaseEthernetDevice;
 
@@ -87,7 +87,7 @@ impl Protocol {
 pub struct BaseIpDevice {
     rbuf: VecDeque<Protocol>,
     sbuf: VecDeque<Protocol>,
-    base: BaseEthernetDevice,
+    pub base: BaseEthernetDevice,
 }
 
 impl BaseIpDevice {
@@ -155,29 +155,17 @@ impl IpHost {
     }
 }
 
-impl Connectable for IpHost {
-    fn get_mac(&self) -> Mac {        
-        self.base.base.get_mac()
+impl Device for IpHost {
+    fn base(&self) -> &super::physl::BaseByteDevice {
+        &self.base.base.base()
     }
 
-    fn get_num_ports(&self) -> usize {
-        self.base.base.get_num_ports()
-    }
-
-    fn get_name(&self) -> &str {
-        &self.base.base.get_name()
+    fn base_mut(&mut self) -> &mut super::physl::BaseByteDevice {
+        &mut self.base.base.base
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
-    }
-
-    fn receive(&mut self, port: Port, x: u8) {
-        self.base.base.receive(port, x);
-    }
-
-    fn send(&mut self) -> Option<(Port, u8)> {
-        self.base.base.send()
     }
 
     fn update(&mut self, ctx: &UpdateContext) {

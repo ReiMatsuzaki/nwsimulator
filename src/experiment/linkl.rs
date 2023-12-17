@@ -1,7 +1,7 @@
 use std::collections::{VecDeque, HashMap};
 
 use super::types::{Port, Mac};
-use super::physl::{BaseByteDevice, Connectable, UpdateContext, Network};
+use super::physl::{BaseByteDevice, Device, UpdateContext, Network};
 use crate::linkl::ethernet_frame::EthernetFrame;
 
 
@@ -9,7 +9,7 @@ pub struct BaseEthernetDevice {
     pub rbuf: VecDeque<EthernetFrame>,
     pub sbuf: VecDeque<EthernetFrame>,
     forward_table: HashMap<Mac, Port>,
-    base: BaseByteDevice,
+    pub base: BaseByteDevice,
 }
 
 impl BaseEthernetDevice {
@@ -66,29 +66,17 @@ impl BaseEthernetDevice {
     }
 }
 
-impl Connectable for BaseEthernetDevice {
-    fn get_mac(&self) -> Mac {        
-        self.base.get_mac()
+impl Device for BaseEthernetDevice {
+    fn base(&self) -> &BaseByteDevice {
+        &self.base
     }
 
-    fn get_num_ports(&self) -> usize {
-        self.base.get_num_ports()
-    }
-
-    fn get_name(&self) -> &str {
-        &self.base.get_name()
+    fn base_mut(&mut self) -> &mut BaseByteDevice {
+        &mut self.base
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
-    }
-
-    fn receive(&mut self, port: Port, x: u8) {
-        self.base.receive(port, x);
-    }
-
-    fn send(&mut self) -> Option<(Port, u8)> {
-        self.base.send()
     }
 
     fn update(&mut self, _ctx: &UpdateContext) {}
@@ -107,29 +95,17 @@ impl Bridge {
     }
 }
 
-impl Connectable for Bridge {
-    fn get_mac(&self) -> Mac {        
-        self.base.get_mac()
+impl Device for Bridge {
+    fn base(&self) -> &BaseByteDevice {
+        &self.base.base
     }
 
-    fn get_num_ports(&self) -> usize {
-        self.base.get_num_ports()
-    }
-
-    fn get_name(&self) -> &str {
-        &self.base.get_name()
+    fn base_mut(&mut self) -> &mut BaseByteDevice {
+        &mut self.base.base
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
-    }
-
-    fn receive(&mut self, port: Port, x: u8) {
-        self.base.receive(port, x);
-    }
-
-    fn send(&mut self) -> Option<(Port, u8)> {
-        self.base.send()
     }
 
     fn update(&mut self, _ctx: &UpdateContext) {

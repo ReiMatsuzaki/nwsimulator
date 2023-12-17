@@ -14,13 +14,33 @@ pub struct UpdateContext {
     pub t: usize,
 }
 
-pub trait Connectable {
-    fn get_mac(&self) -> Mac;
-    fn get_name(&self) -> &str;
-    fn get_num_ports(&self) -> usize;
+pub trait Device {
+    fn base(&self) -> &BaseByteDevice;
+
+    fn base_mut(&mut self) -> &mut BaseByteDevice;
+
+    fn get_mac(&self) -> Mac {
+        self.base().mac
+    }
+
+    fn get_name(&self) -> &str {
+        &self.base().name
+    }
+
+    fn get_num_ports(&self) -> usize {
+        self.base().num_ports
+    }
+
+    fn receive(&mut self, port: Port, x: u8) {
+        self.base_mut().rbuf.push_back((port, x));
+    }
+
+    fn send(&mut self) -> Option<(Port, u8)> {
+        self.base_mut().sbuf.pop_front()
+    }
+
     fn as_any(&self) -> &dyn Any;
-    fn receive(&mut self, port: Port, x: u8);
-    fn send(&mut self) -> Option<(Port, u8)>;
+
     fn update(&mut self, _ctx: &UpdateContext);
 }
 
@@ -52,36 +72,6 @@ impl BaseByteDevice {
     }
 }
 
-impl Connectable for BaseByteDevice {
-    fn get_mac(&self) -> Mac {
-        self.mac
-    }
-
-    fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    fn get_num_ports(&self) -> usize {
-        self.num_ports
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn receive(&mut self, port: Port, x: u8) {
-        self.rbuf.push_back((port, x));
-    }
-
-    fn send(&mut self) -> Option<(Port, u8)> {
-        self.sbuf.pop_front()
-    }
-
-    fn update(&mut self, _ctx: &UpdateContext) {
-        // do nothing
-    }
-}
-
 struct Repeater {
     base: BaseByteDevice,
 }
@@ -92,29 +82,17 @@ impl Repeater {
         }
     }
 }
-impl Connectable for Repeater {
-    fn get_mac(&self) -> Mac {
-        self.base.get_mac()
+impl Device for Repeater {
+    fn base(&self) -> &BaseByteDevice {
+        &self.base
     }
 
-    fn get_name(&self) -> &str {
-        self.base.get_name()
-    }
-
-    fn get_num_ports(&self) -> usize {
-        self.base.get_num_ports()
+    fn base_mut(&mut self) -> &mut BaseByteDevice {
+        &mut self.base
     }
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-
-    fn send(&mut self) -> Option<(Port, u8)> {
-        self.base.send()
-    }
-
-    fn receive(&mut self, port: Port, x: u8) {
-        self.base.receive(port, x);
     }
 
     fn update(&mut self, _ctx: &UpdateContext) {
@@ -145,29 +123,17 @@ impl ByteHost {
         }
     }
 }
-impl Connectable for ByteHost {
-    fn get_mac(&self) -> Mac {
-        self.base.get_mac()
+impl Device for ByteHost {
+    fn base(&self) -> &BaseByteDevice {
+        &self.base
     }
 
-    fn get_name(&self) -> &str {
-        self.base.get_name()
-    }
-
-    fn get_num_ports(&self) -> usize {
-        self.base.get_num_ports()
+    fn base_mut(&mut self) -> &mut BaseByteDevice {
+        &mut self.base
     }
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-
-    fn send(&mut self) -> Option<(Port, u8)> {
-        self.base.send()
-    }
-
-    fn receive(&mut self, port: Port, x: u8) {
-        self.base.receive(port, x);
     }
 
     fn update(&mut self, ctx: &UpdateContext) {
@@ -183,16 +149,27 @@ impl Connectable for ByteHost {
 }
 
 pub struct Network {
-    devices: Vec<Box<dyn Connectable>>,
+    devices: Vec<Box<dyn Device>>,
     medias: Vec<Media>,
 }
 
 impl Network {
-    pub fn new(devices: Vec<Box<dyn Connectable>>, medias: Vec<Media>) -> Network {
+    pub fn new(devices: Vec<Box<dyn Device>>, medias: Vec<Media>) -> Network {
         Network { devices, medias }
     }
 
     fn connect(&mut self, mac0: Mac, port0: Port, mac1: Mac, port1: Port) -> Res<()> {
+        for (m, p) in [(mac0, port0), (mac1, port1)] {
+            let d = self.get_device(m)?;
+            if p.value() >= d.get_num_ports().try_into().unwrap() {
+                return Err(Error::InvalidPort { mac: mac0, name: d.get_name().to_string(), port: p });
+            }
+        }
+
+        if mac0 == mac1 {
+            return Err(Error::NetworkConnectFailed { mac0, mac1, msg: "same mac address".to_string() })
+        }
+
         self.medias.push(Media {
             mac0,
             port0,
@@ -208,7 +185,7 @@ impl Network {
         Ok(())
     }
 
-    pub fn get_device(&mut self, mac: Mac) -> Res<&mut Box<dyn Connectable>> {
+    pub fn get_device(&mut self, mac: Mac) -> Res<&mut Box<dyn Device>> {
         self.devices
             .iter_mut()
             .find(|d| d.get_mac() == mac)
