@@ -10,7 +10,7 @@ impl Mac {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Port { pub value: u32 }
 
 impl Port {
@@ -19,22 +19,22 @@ impl Port {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IpAddr {
     pub value: u32,
 }
 
-impl IpAddr {
-    pub fn new(value: u32) -> IpAddr {
-        IpAddr { value }
-    }
-}
+// impl IpAddr {
+//     pub fn new(value: u32) -> IpAddr {
+//         IpAddr { value }
+//     }
+// }
 
 #[derive(Debug)]
 pub enum Error {
-    InvalidPort {mac: Mac, name: String, port: Port},
+    // InvalidPort {mac: Mac, name: String, port: Port, msg: String},
     DeviceNotFound { mac: Mac },
-    DecodeFailed { payload: Vec<u8>, msg: String },
+    // DecodeFailed { payload: Vec<u8>, msg: String },
     NetworkConnectFailed { mac0: Mac, mac1: Mac, msg: String },
     ConnectionNotFound { mac: Mac, port: Port }
     // LinklError { e: LinklError },
@@ -44,12 +44,12 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::InvalidPort { mac, name, port } =>
-                write!(f, "Error on device {}({}). Invalid Port: {}", name, mac.value, port.value),
+            // Error::InvalidPort { mac, name, port, msg } =>
+            //     write!(f, "Invalid port on device {}({}). port={}, msg={}", name, mac.value, port.value, msg),
             Error::DeviceNotFound {mac} =>
                 write!(f, "Device not found: {}", mac.value),
-            Error::DecodeFailed { payload, msg } => 
-                write!(f, "Decode failed: {}. payload={:?}", msg, payload),
+            // Error::DecodeFailed { payload, msg } => 
+            //     write!(f, "Decode failed: {}. payload={:?}", msg, payload),
             Error::NetworkConnectFailed { mac0, mac1, msg } =>
                 write!(f, "Network connect faild: {} - {}. {}", mac0.value, mac1.value, msg),
             Error::ConnectionNotFound { mac, port } =>

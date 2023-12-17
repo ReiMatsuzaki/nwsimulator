@@ -63,6 +63,18 @@ impl BaseDevice {
         }
     }
 
+    // pub fn get_mac(&self) -> Mac {
+    //     self.mac
+    // }
+
+    // pub fn get_name(&self) -> &str {
+    //     &self.name
+    // }
+
+    pub fn get_num_ports(&self) -> usize {
+        self.num_ports
+    }
+
     pub fn pop_received(&mut self) -> Option<(Port, u8)> {
         self.rbuf.pop_front()
     }
@@ -166,15 +178,33 @@ impl Network {
     }
 
     fn connect(&mut self, mac0: Mac, port0: Port, mac1: Mac, port1: Port) -> Res<()> {
-        for (m, p) in [(mac0, port0), (mac1, port1)] {
-            let d = self.get_device(m)?;
-            if p.value >= d.get_num_ports().try_into().unwrap() {
-                return Err(Error::InvalidPort {
-                    mac: mac0,
-                    name: d.get_name().to_string(),
-                    port: p,
-                });
-            }
+        let d = self.get_device(mac0)?;
+        let num_ports = d.get_num_ports();
+        let name = d.get_name().to_string();
+        if port0.value >= num_ports.try_into().unwrap() {
+            return Err(Error::NetworkConnectFailed {
+                mac0,
+                mac1,
+                msg: format!(
+                    "{}({}):{} port excced num_port({})",
+                    name,
+                    mac0.value,
+                    port0.value,
+                    d.get_num_ports(),
+                ),
+            });
+        }
+
+        if self
+            .connections
+            .iter()
+            .any(|c| c.mac0 == mac0 && c.port0 == port0)
+        {
+            return Err(Error::NetworkConnectFailed {
+                mac0,
+                mac1,
+                msg: format!("{}:{} port already connected", mac0.value, port0.value,),
+            });
         }
 
         if mac0 == mac1 {
