@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::any::Any;
 use super::types::*;
 
-pub struct Media {
+pub struct Connection {
     pub mac0: Mac,
     pub port0: Port,
     pub mac1: Mac,
@@ -97,7 +97,7 @@ impl Device for Repeater {
 
     fn update(&mut self, _ctx: &UpdateContext) {
         while let Some((p, x)) = self.base.pop_received() {
-            self.base.push_sending((Port::new(1-p.value()), x));
+            self.base.push_sending((Port::new(1-p.value), x));
         }
     }
 }
@@ -150,18 +150,18 @@ impl Device for ByteHost {
 
 pub struct Network {
     devices: Vec<Box<dyn Device>>,
-    medias: Vec<Media>,
+    medias: Vec<Connection>,
 }
 
 impl Network {
-    pub fn new(devices: Vec<Box<dyn Device>>, medias: Vec<Media>) -> Network {
+    pub fn new(devices: Vec<Box<dyn Device>>, medias: Vec<Connection>) -> Network {
         Network { devices, medias }
     }
 
     fn connect(&mut self, mac0: Mac, port0: Port, mac1: Mac, port1: Port) -> Res<()> {
         for (m, p) in [(mac0, port0), (mac1, port1)] {
             let d = self.get_device(m)?;
-            if p.value() >= d.get_num_ports().try_into().unwrap() {
+            if p.value >= d.get_num_ports().try_into().unwrap() {
                 return Err(Error::InvalidPort { mac: mac0, name: d.get_name().to_string(), port: p });
             }
         }
@@ -170,7 +170,7 @@ impl Network {
             return Err(Error::NetworkConnectFailed { mac0, mac1, msg: "same mac address".to_string() })
         }
 
-        self.medias.push(Media {
+        self.medias.push(Connection {
             mac0,
             port0,
             mac1,

@@ -62,7 +62,7 @@ impl ARP {
 
     pub fn encode(&self) -> Vec<u8> {    
         // FIXME
-        vec![self.src_mac.value() as u8,
+        vec![self.src_mac.value as u8,
         self.src_ipaddr.value as u8,
         self.dst_ipaddr.value as u8
         ]
