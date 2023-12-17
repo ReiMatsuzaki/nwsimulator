@@ -31,17 +31,17 @@ pub trait Device {
         self.base().num_ports
     }
 
-    fn receive(&mut self, port: Port, x: u8) {
+    fn push_rbuf(&mut self, port: Port, x: u8) {
         self.base_mut().rbuf.push_back((port, x));
     }
 
-    fn send(&mut self) -> Option<(Port, u8)> {
+    fn pop_sbuf(&mut self) -> Option<(Port, u8)> {
         self.base_mut().sbuf.pop_front()
     }
 
     fn as_any(&self) -> &dyn Any;
 
-    fn update(&mut self, _ctx: &UpdateContext);
+    fn update(&mut self, _ctx: &UpdateContext) -> Res<()>;
 }
 
 pub struct BaseDevice {
@@ -75,11 +75,11 @@ impl BaseDevice {
         self.num_ports
     }
 
-    pub fn pop_received(&mut self) -> Option<(Port, u8)> {
+    pub fn pop_rbuf(&mut self) -> Option<(Port, u8)> {
         self.rbuf.pop_front()
     }
 
-    pub fn push_sending(&mut self, x: (Port, u8)) {
+    pub fn push_sbuf(&mut self, x: (Port, u8)) {
         self.sbuf.push_back(x)
     }
 }
@@ -109,10 +109,11 @@ impl Device for Repeater {
         self
     }
 
-    fn update(&mut self, _ctx: &UpdateContext) {
-        while let Some((p, x)) = self.base.pop_received() {
-            self.base.push_sending((Port::new(1 - p.value), x));
+    fn update(&mut self, _ctx: &UpdateContext) -> Res<()> {
+        while let Some((p, x)) = self.base.pop_rbuf() {
+            self.base.push_sbuf((Port::new(1 - p.value), x));
         }
+        Ok(())
     }
 }
 
@@ -152,15 +153,16 @@ impl Device for ByteHost {
         self
     }
 
-    fn update(&mut self, ctx: &UpdateContext) {
-        while let Some((port, x)) = self.base.pop_received() {
+    fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
+        while let Some((port, x)) = self.base.pop_rbuf() {
             self.receives.push(ByteLog { t: ctx.t, port, x });
         }
         for ByteLog { t, port, x } in &self.schedules {
             if *t == ctx.t {
-                self.base.push_sending((*port, *x));
+                self.base.push_sbuf((*port, *x));
             }
         }
+        Ok(())
     }
 }
 
@@ -252,7 +254,7 @@ impl Network {
         }
         for idx in 0..self.devices.len() {
             let d = &mut self.devices[idx];
-            if let Some((src_port, x)) = d.send() {
+            if let Some((src_port, x)) = d.pop_sbuf() {
                 let src_mac = d.get_mac();
                 let (dst_mac, dst_port) = self.find_connection(src_mac, src_port)?;
                 if disp {
@@ -261,12 +263,12 @@ impl Network {
                         src_mac.value, src_port.value, dst_mac.value, dst_port.value, x
                     );
                 }
-                self.get_device(dst_mac)?.receive(dst_port, x);
+                self.get_device(dst_mac)?.push_rbuf(dst_port, x);
             }
         }
         for d in &mut self.devices {
             let ctx = UpdateContext { t };
-            d.update(&ctx);
+            d.update(&ctx)?;
         }
         if disp {
             println!("");

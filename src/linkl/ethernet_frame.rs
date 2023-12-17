@@ -3,6 +3,7 @@ use crate::{linkl::linkl_error::Res, physl::device::DeviceContext};
 use super::linkl_error::LinklError;
 
 #[derive(Clone, Debug)]
+#[derive(PartialEq)]
 pub struct EthernetFrame {
     pub dst: u64,       // 6 bytes
     pub src: u64,       // 6 bytes

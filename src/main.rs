@@ -28,7 +28,7 @@ fn main() -> io::Result<()> {
         3 => { linkl::run_sample_ethernet_switch().unwrap(); } ,
 
         10 => { experiment::physl::run_sample().unwrap(); }
-        11 => { experiment::linkl::run_sample(); }
+        11 => { experiment::linkl::run_sample().unwrap(); }
         // 12 => { experiment::interl::run_sample(); }
         _ => println!("No such run number"),
     }
