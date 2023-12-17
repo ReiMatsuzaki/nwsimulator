@@ -1,6 +1,6 @@
-use std::collections::VecDeque;
-use std::any::Any;
 use super::types::*;
+use std::any::Any;
+use std::collections::VecDeque;
 
 pub struct Connection {
     pub mac0: Mac,
@@ -75,6 +75,7 @@ impl BaseDevice {
 struct Repeater {
     base: BaseDevice,
 }
+
 impl Repeater {
     pub fn new(mac: Mac, name: &str) -> Repeater {
         Repeater {
@@ -82,6 +83,7 @@ impl Repeater {
         }
     }
 }
+
 impl Device for Repeater {
     fn base(&self) -> &BaseDevice {
         &self.base
@@ -97,7 +99,7 @@ impl Device for Repeater {
 
     fn update(&mut self, _ctx: &UpdateContext) {
         while let Some((p, x)) = self.base.pop_received() {
-            self.base.push_sending((Port::new(1-p.value), x));
+            self.base.push_sending((Port::new(1 - p.value), x));
         }
     }
 }
@@ -114,6 +116,7 @@ struct ByteHost {
     schedules: Vec<ByteLog>,
     receives: Vec<ByteLog>,
 }
+
 impl ByteHost {
     pub fn new(mac: Mac, name: &str, schedules: Vec<ByteLog>) -> ByteHost {
         ByteHost {
@@ -123,6 +126,7 @@ impl ByteHost {
         }
     }
 }
+
 impl Device for ByteHost {
     fn base(&self) -> &BaseDevice {
         &self.base
@@ -140,7 +144,7 @@ impl Device for ByteHost {
         while let Some((port, x)) = self.base.pop_received() {
             self.receives.push(ByteLog { t: ctx.t, port, x });
         }
-        for ByteLog {t, port, x} in &self.schedules {
+        for ByteLog { t, port, x } in &self.schedules {
             if *t == ctx.t {
                 self.base.push_sending((*port, *x));
             }
@@ -155,19 +159,30 @@ pub struct Network {
 
 impl Network {
     pub fn new(devices: Vec<Box<dyn Device>>, medias: Vec<Connection>) -> Network {
-        Network { devices, connections: medias }
+        Network {
+            devices,
+            connections: medias,
+        }
     }
 
     fn connect(&mut self, mac0: Mac, port0: Port, mac1: Mac, port1: Port) -> Res<()> {
         for (m, p) in [(mac0, port0), (mac1, port1)] {
             let d = self.get_device(m)?;
             if p.value >= d.get_num_ports().try_into().unwrap() {
-                return Err(Error::InvalidPort { mac: mac0, name: d.get_name().to_string(), port: p });
+                return Err(Error::InvalidPort {
+                    mac: mac0,
+                    name: d.get_name().to_string(),
+                    port: p,
+                });
             }
         }
 
         if mac0 == mac1 {
-            return Err(Error::NetworkConnectFailed { mac0, mac1, msg: "same mac address".to_string() })
+            return Err(Error::NetworkConnectFailed {
+                mac0,
+                mac1,
+                msg: "same mac address".to_string(),
+            });
         }
 
         self.connections.push(Connection {
@@ -193,10 +208,11 @@ impl Network {
     }
 
     fn find_connection(&self, mac: Mac, port: Port) -> Res<(Mac, Port)> {
-        self.connections.iter()
-        .find(|c| c.mac0 == mac && c.port0 == port)
-        .map(|c| (c.mac1, c.port1))
-        .ok_or(Error::ConnectionNotFound { mac, port })
+        self.connections
+            .iter()
+            .find(|c| c.mac0 == mac && c.port0 == port)
+            .map(|c| (c.mac1, c.port1))
+            .ok_or(Error::ConnectionNotFound { mac, port })
     }
 
     fn update(&mut self, t: usize) -> Res<()> {
@@ -210,13 +226,12 @@ impl Network {
                 let src_mac = d.get_mac();
                 let (dst_mac, dst_port) = self.find_connection(src_mac, src_port)?;
                 if disp {
-                    print!("{:}:{:} -> {:}:{:} : 0x{:0>2X}     ", 
-                           src_mac.value, src_port.value,
-                           dst_mac.value, dst_port.value,
-                           x);
+                    print!(
+                        "{:}:{:} -> {:}:{:} : 0x{:0>2X}     ",
+                        src_mac.value, src_port.value, dst_mac.value, dst_port.value, x
+                    );
                 }
-                self.get_device(dst_mac)?
-                .receive(dst_port, x);
+                self.get_device(dst_mac)?.receive(dst_port, x);
             }
         }
         for d in &mut self.devices {
@@ -243,19 +258,32 @@ pub fn run_sample() -> Res<Vec<ByteLog>> {
     let repeater = Box::new(Repeater::new(mac0, "repeater0"));
     let mac1 = Mac::new(24);
     let schedules = vec![
-        ByteLog{ t: 0, port: Port::new(0), x: 0x01 },
-        ByteLog{ t: 1, port: Port::new(0), x: 0x02 },
-        ByteLog{ t: 2, port: Port::new(0), x: 0x03 },
-        ByteLog{ t: 3, port: Port::new(0), x: 0x04 },
+        ByteLog {
+            t: 0,
+            port: Port::new(0),
+            x: 0x01,
+        },
+        ByteLog {
+            t: 1,
+            port: Port::new(0),
+            x: 0x02,
+        },
+        ByteLog {
+            t: 2,
+            port: Port::new(0),
+            x: 0x03,
+        },
+        ByteLog {
+            t: 3,
+            port: Port::new(0),
+            x: 0x04,
+        },
     ];
     let host1 = Box::new(ByteHost::new(mac1, "host1", schedules));
     let mac2 = Mac::new(25);
     let host2 = Box::new(ByteHost::new(mac2, "host2", vec![]));
 
-    let mut nw = Network::new(
-        vec![repeater, host1, host2],
-        vec![]
-    );
+    let mut nw = Network::new(vec![repeater, host1, host2], vec![]);
     nw.connect_both(mac0, Port::new(0), mac1, Port::new(0))?;
     nw.connect_both(mac0, Port::new(1), mac2, Port::new(0))?;
     nw.run(10)?;
@@ -273,7 +301,21 @@ mod tests {
     #[test]
     fn test_2byte_host() {
         let log = run_sample().unwrap();
-        assert_eq!(log[0], ByteLog {t: 2, port: Port::new(0), x: 0x01});
-        assert_eq!(log[2], ByteLog {t: 4, port: Port::new(0), x: 0x03});
+        assert_eq!(
+            log[0],
+            ByteLog {
+                t: 2,
+                port: Port::new(0),
+                x: 0x01
+            }
+        );
+        assert_eq!(
+            log[2],
+            ByteLog {
+                t: 4,
+                port: Port::new(0),
+                x: 0x03
+            }
+        );
     }
 }
