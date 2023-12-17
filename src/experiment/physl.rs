@@ -63,13 +63,13 @@ impl BaseDevice {
         }
     }
 
-    // pub fn get_mac(&self) -> Mac {
-    //     self.mac
-    // }
+    pub fn get_mac(&self) -> Mac {
+        self.mac
+    }
 
-    // pub fn get_name(&self) -> &str {
-    //     &self.name
-    // }
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
 
     pub fn get_num_ports(&self) -> usize {
         self.num_ports
@@ -275,6 +275,12 @@ impl Network {
     }
 
     pub fn run(&mut self, maxt: usize) -> Res<()> {
+        if crate::output::is_byte_level() {
+            println!(" t: src -> dst : x");
+        } else if crate::output::is_frame_level() {
+            println!(" t: device    : action : frame");
+        }
+        
         for t in 0..maxt {
             self.update(t)?;
         }

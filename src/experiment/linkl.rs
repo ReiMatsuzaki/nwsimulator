@@ -24,7 +24,9 @@ impl BaseEthernetDevice {
         }
     }
 
-    pub fn pop_received(&mut self) -> Option<EthernetFrame> {
+    pub fn pop_received(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
+        let disp = crate::output::is_frame_level();
+
         while let Some((port, x)) = self.base.pop_received() {
             if let Some(xs) = self.bufs.get_mut(&port) {
                 xs.push(x);
@@ -35,6 +37,11 @@ impl BaseEthernetDevice {
             if let Some(xs) = self.bufs.get(&port) {
                 // FIXME: violated bytes are not consumed
                 if let Ok(frame) = EthernetFrame::decode(xs) {
+                    if disp {
+                        print!("{:>2}: ", ctx.t);
+                        println!("{}({}): receive: {:?}", self.base.get_name(), self.base.get_mac().value, frame);
+                    }
+
                     self.forward_table.insert(Mac::new(frame.src), port);
                     self.rbuf.push_back(frame);
                 }
@@ -43,58 +50,45 @@ impl BaseEthernetDevice {
         self.rbuf.pop_front()
     }
 
-    pub fn push_sending(&mut self, frame: EthernetFrame) {
-        let bytes = EthernetFrame::encode(&frame);
-        // FIXME: duplicated code
+    pub fn push_sending(&mut self, frame: EthernetFrame, ctx: &UpdateContext) {
+        let disp = crate::output::is_frame_level();
+        if disp {
+            print!("{:>2}: ", ctx.t);
+            println!("{}({}): send:    {:?}", self.base.get_name(), self.base.get_mac().value, frame);
+        }
+
+        let mut ports = vec![];
         if let Some(port) = self.forward_table.get(&Mac::new(frame.dst)) {
-            for byte in &bytes {
-                self.base.push_sending((*port, *byte));
-            }
+            ports.push(*port);
         } else if let Some(src_port) = self.forward_table.get(&Mac::new(frame.src)) {
             for port in 0..self.base.get_num_ports() {
-                let port = Port::new(port as u32);
-                if port != *src_port {
-                    for byte in &bytes {
-                        self.base.push_sending((port, *byte));
-                    }
+                if port != src_port.value as usize {
+                    ports.push(Port::new(port as u32));
                 }
             }
         } else {
             for port in 0..self.base.get_num_ports() {
-                let port = Port::new(port as u32);
-                for byte in &bytes {
-                    self.base.push_sending((port, *byte));
-                }
-            }        
+                ports.push(Port::new(port as u32));
+            }
+        };
+
+        let bytes = EthernetFrame::encode(&frame);
+        for port in ports {
+            for byte in &bytes {
+                self.base.push_sending((port, *byte));
+            }
         }
     }
 
-    pub fn handle_frame(&mut self, handler: & dyn Fn(EthernetFrame) -> Vec<EthernetFrame>) {
-        while let Some(frame) = self.pop_received() {
+    pub fn handle_frame(&mut self, handler: & dyn Fn(EthernetFrame) -> Vec<EthernetFrame>, ctx: &UpdateContext) {
+        while let Some(frame) = self.pop_received(ctx) {
             let response_frame_list = handler(frame);
             for f in response_frame_list {
-                self.push_sending(f);
+                self.push_sending(f, ctx);
             }
         }
     }
 }
-
-// // FIXME: delete it?
-// impl Device for BaseEthernetDevice {
-//     fn base(&self) -> &BaseDevice {
-//         &self.base
-//     }
-
-//     fn base_mut(&mut self) -> &mut BaseDevice {
-//         &mut self.base
-//     }
-
-//     fn as_any(&self) -> &dyn std::any::Any {
-//         self
-//     }
-
-//     fn update(&mut self, _ctx: &UpdateContext) {}
-// }
 
 pub struct EthernetDevice {
     base: BaseEthernetDevice,
@@ -155,50 +149,19 @@ impl Device for EthernetDevice {
             // println!("schedule: {:?}", schedule);
             if schedule.t == ctx.t {
                 // println!("push scheduleing to sending");
-                self.base.push_sending(schedule.frame.clone());
+                self.base.push_sending(schedule.frame.clone(), ctx);
                 self.schedules.pop_front();
             }
         }
 
-        self.base.handle_frame(&self.handler)
+        self.base.handle_frame(&self.handler, ctx)
     }
 }
 
-// FIXME: implement EtherDevice which use closure
-//        Bridge can be replaced with EithernetDevice
-// struct Bridge {
-//     base: BaseEthernetDevice,
-// }
-
-// impl Bridge {
-//     pub fn new_box(mac: Mac, name: &str) -> Box<Bridge> {
-//         Box::new(
-//             Bridge {
-//                 base: BaseEthernetDevice::new(mac, name, 2),
-//         })
-//     }
-// }
-
-// impl Device for Bridge {
-//     fn base(&self) -> &BaseDevice {
-//         &self.base.base
-//     }
-
-//     fn base_mut(&mut self) -> &mut BaseDevice {
-//         &mut self.base.base
-//     }
-
-//     fn as_any(&self) -> &dyn std::any::Any {
-//         self
-//     }
-
-//     fn update(&mut self, _ctx: &UpdateContext) {
-//         self.base.handle_frame(&|frame| vec![frame])
-//     }
-// }
 
 pub fn run_sample() {
     println!("run experimental linkl sample");
+    crate::output::set_level(crate::output::Level::Frame);
     let mac0 = Mac::new(23);
     let mac1 = Mac::new(24);
     let mac2 = Mac::new(25);
