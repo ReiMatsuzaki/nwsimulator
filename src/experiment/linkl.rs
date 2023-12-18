@@ -103,36 +103,19 @@ pub struct BaseEthernetDevice {
     forward_table: HashMap<Mac, Port>,
     bufs: HashMap<Port, Vec<u8>>,
     pub base: BaseDevice,
-    device_type: DeviceType,
-    schedules: VecDeque<EthernetLog>,
+
     pub rlog: Vec<EthernetLog>,
     pub slog: Vec<EthernetLog>,
 }
 
 impl BaseEthernetDevice {
-    pub fn new_host(mac: Mac, name: &str) -> BaseEthernetDevice {
-        BaseEthernetDevice {
-            rbuf: VecDeque::new(),
-            sbuf: VecDeque::new(), // FIXME: sbuf isn't used
-            forward_table: HashMap::new(),
-            bufs: HashMap::new(),
-            base: BaseDevice::new(mac, name, 1),
-            device_type: DeviceType::Host,
-            schedules: VecDeque::new(),
-            rlog: Vec::new(),
-            slog: Vec::new(),
-        }
-    }
-
-    pub fn new_hub(mac: Mac, name: &str, num_ports: usize) -> BaseEthernetDevice {
+    pub fn new(mac: Mac, name: &str, num_ports: usize) -> BaseEthernetDevice {
         BaseEthernetDevice {
             rbuf: VecDeque::new(),
             sbuf: VecDeque::new(), // FIXME: sbuf isn't used
             forward_table: HashMap::new(),
             bufs: HashMap::new(),
             base: BaseDevice::new(mac, name, num_ports),
-            device_type: DeviceType::Hub,
-            schedules: VecDeque::new(),
             rlog: Vec::new(),
             slog: Vec::new(),
         }
@@ -204,44 +187,8 @@ impl BaseEthernetDevice {
         }
     }
 
-    pub fn handle_frame(&mut self, handler: &Handler, ctx: &UpdateContext) -> Res<()> {
-        // push frame from schedule to sbuf
-        if let Some(schedule) = self.schedules.front() {
-            if schedule.t == ctx.t {
-                self.push_sbuf(schedule.frame.clone(), ctx);
-                self.schedules.pop_front();
-            }
-        }
 
-        // rbuf -> sbuf
-        while let Some(frame) = self.pop_rbuf(ctx) {
-            let dst = frame.dst;
-            let src = frame.src;
-            match self.device_type {
-                DeviceType::Host => {
-                    if dst == self.base.get_mac() {
-                        let response_frame_list = handler(frame)?;
-                        match response_frame_list.as_slice() {
-                            [] => {},
-                            [f] => {
-                                // make response frame
-                                let f = EthernetFrame::new(src, dst, f.ethertype, f.payload.clone());
-                                self.push_sbuf(f, ctx);
-                            },
-                            _ => panic!("sending of more than 2 frames is not supported")
-                        }
-                    } else {
-                        // just consume frame
-                    }
-                },
-                DeviceType::Hub => {
-                    // this frame is not for me. just forward it.
-                    self.push_sbuf(frame, ctx);
-                }
-            }
-        }
-        Ok(())
-    }
+    // }
 
     pub fn add_forwarding_table(&mut self, dst: Mac, port: Port) {
         self.forward_table.insert(dst, port);
@@ -251,53 +198,56 @@ impl BaseEthernetDevice {
 pub struct EthernetDevice {
     base: BaseEthernetDevice,
     handler: Box<Handler>,
-    // schedules: VecDeque<EthernetLog>,
+    device_type: DeviceType,
+    schedules: VecDeque<EthernetLog>,
 }
 
 impl EthernetDevice {
-    fn new(base: BaseEthernetDevice, handler: Box<Handler>) -> EthernetDevice {
+    fn new(base: BaseEthernetDevice, handler: Box<Handler>, device_type: DeviceType) -> EthernetDevice {
         EthernetDevice {
             base,
             handler,
+            device_type,
+            schedules: VecDeque::new(),
         }
     }
 
     pub fn build_host(mac: Mac, name: &str) -> Box<EthernetDevice> {
-        let base = BaseEthernetDevice::new_host(mac, name);
+        let base = BaseEthernetDevice::new(mac, name, 1);
         let handler = Box::new(
             |_frame| Ok(vec![])
         );
-        Box::new(Self::new(base, handler))
+        Box::new(Self::new(base, handler, DeviceType::Host))
     }
 
     pub fn build_echo_host(mac: Mac, name: &str) -> Box<EthernetDevice> {
-        let base = BaseEthernetDevice::new_host(mac, name);
+        let base = BaseEthernetDevice::new(mac, name, 1);
         let handler = Box::new(
             |frame| Ok(vec![frame])
         );
-        Box::new(Self::new(base, handler))
+        Box::new(Self::new(base, handler, DeviceType::Host))
     }
 
     pub fn build_bridge(mac: Mac, name: &str) -> Box<EthernetDevice> {
-        let base = BaseEthernetDevice::new_hub(mac, name, 2);
+        let base = BaseEthernetDevice::new(mac, name, 2);
         let handler = Box::new(
             |frame| 
             panic!("bridge shouldn't receive frame: {}", frame)
         );
-        Box::new(Self::new(base, handler))
+        Box::new(Self::new(base, handler, DeviceType::Hub))
     }
 
     pub fn build_switch(mac: Mac, name: &str, num_ports: usize) -> Box<EthernetDevice> {
-        let base = BaseEthernetDevice::new_hub(mac, name, num_ports);
+        let base = BaseEthernetDevice::new(mac, name, num_ports);
         let handler = Box::new(
             |frame| 
             panic!("switch shouldn't receive frame: {}", frame)
         );
-        Box::new(Self::new(base, handler))
+        Box::new(Self::new(base, handler, DeviceType::Hub))
     }
 
     pub fn add_schedule(&mut self, t: usize, frame: EthernetFrame) {
-        self.base.schedules.push_back(EthernetLog { t, frame });
+        self.schedules.push_back(EthernetLog { t, frame });
     }
 
     pub fn get_rlog(&self) -> &Vec<EthernetLog> {
@@ -323,7 +273,41 @@ impl Device for EthernetDevice {
     }
 
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        self.base.handle_frame(&self.handler, ctx)
+        if let Some(schedule) = self.schedules.front() {
+            if schedule.t == ctx.t {
+                self.base.push_sbuf(schedule.frame.clone(), ctx);
+                self.schedules.pop_front();
+            }
+        }
+
+        // rbuf -> sbuf
+        while let Some(frame) = self.base.pop_rbuf(ctx) {
+            let dst = frame.dst;
+            let src = frame.src;
+            match self.device_type {
+                DeviceType::Host => {
+                    if dst == self.base.base.get_mac() {
+                        let response_frame_list = (self.handler)(frame)?;
+                        match response_frame_list.as_slice() {
+                            [] => {},
+                            [f] => {
+                                // make response frame
+                                let f = EthernetFrame::new(src, dst, f.ethertype, f.payload.clone());
+                                self.base.push_sbuf(f, ctx);
+                            },
+                            _ => panic!("sending of more than 2 frames is not supported")
+                        }
+                    } else {
+                        // just consume frame
+                    }
+                },
+                DeviceType::Hub => {
+                    // this frame is not for me. just forward it.
+                    self.base.push_sbuf(frame, ctx);
+                }
+            }
+        }
+        Ok(())
     }
 }
 

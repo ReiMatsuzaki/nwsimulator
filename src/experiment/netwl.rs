@@ -52,7 +52,7 @@ impl BaseIpDevice {
             rbuf: VecDeque::new(),
             // sbuf: VecDeque::new(),
             // FIXME: support hub
-            base: BaseEthernetDevice::new_host(mac, name),
+            base: BaseEthernetDevice::new(mac, name, ip_addr_ports.len()),
             subnet_mask: SubnetMask::new(24),
             ip_addr_ports: ip_addr_ports,
             routing_table: HashMap::new(),
