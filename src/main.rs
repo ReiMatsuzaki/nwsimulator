@@ -3,7 +3,6 @@ mod physl;
 mod linkl;
 mod experiment;
 
-
 use std::io;
 use clap::Parser;
 
@@ -30,7 +29,9 @@ fn main() -> io::Result<()> {
         10 => { experiment::physl::run_sample().unwrap(); }
         20 => { experiment::linkl::run_sample().unwrap(); }
         21 => { experiment::linkl::run_sample_3host().unwrap(); }
+
         30 => { experiment::netwl::run_host_host().unwrap(); }
+        31 => { experiment::netwl::run_2host_1router().unwrap(); }
         _ => println!("No such run number"),
     }
 
