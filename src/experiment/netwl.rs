@@ -223,13 +223,11 @@ impl Device for IpHost {
             if ip.dst == self.get_ip_addr() {
                 // FIXME
                 // prepare respnse and send to src
-                let payload_received = vec![0x00];
-                let payload = (self.payload_fn)(&payload_received);
+                let payload = (self.payload_fn)(&ip.payload);
                 match payload {
                     None => {}
-                    Some(_payload) => {
-                        // FIXME: push payload
-                        let ip = IP::new(ip.dst, ip.src);
+                    Some(payload) => {
+                        let ip = IP::new(ip.dst, ip.src, payload);
                         let ip = NetworkProtocol::IP(ip);
                         self.base.push_sbuf(ip, ctx)?;
                     }
@@ -295,6 +293,8 @@ impl Router {
             if let Some(dst_mac) = self.base.arp_table.get(dst_ip) {
                 dst_mac
             } else {
+                // FIXME: send ICMP (unreachable)
+                // self.push_sbuf(ICMP(src: self.src, dst: ip.src, ICMPType::Unreachable), ctx)?;
                 panic!("failed to find in arp table");
             }
         } else {
@@ -350,7 +350,7 @@ pub fn run_host_host() -> Res<()> {
     crate::output::set_level(crate::output::Level::Frame);
     let addr0 = IpAddr::new(0x0a00_0001);
     let addr1 = IpAddr::new(0x0a00_0002);
-    let ip0 = IP::new(addr0, addr1);
+    let ip0 = IP::new(addr0, addr1, vec![0x01, 0x02]);
     let mac0 = Mac::new(761);
     let mac1 = Mac::new(762);
     let port0 = Port::new(0);
@@ -385,7 +385,7 @@ pub fn run_2host_1router() -> Res<()> {
     let mac_r = Mac::new(764);
 
     let mut host_a = IpHost::new_echo(mac_a, "hostA", addr_a);
-    let ip0 = IP::new(addr_a, addr_b);
+    let ip0 = IP::new(addr_a, addr_b, vec![0x01, 0x02]);
     host_a.add_schedule(0, NetworkProtocol::IP(ip0));
     host_a.add_arp_entry(addr_b, mac_b)?;
 
