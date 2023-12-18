@@ -29,7 +29,7 @@ fn main() -> io::Result<()> {
 
         10 => { experiment::physl::run_sample().unwrap(); }
         11 => { experiment::linkl::run_sample().unwrap(); }
-        12 => { experiment::netwl::run_sample(); }
+        12 => { experiment::netwl::run_host_host().unwrap(); }
         _ => println!("No such run number"),
     }
 

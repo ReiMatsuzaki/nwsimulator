@@ -10,6 +10,10 @@ pub struct IP {
 }
 
 impl IP {
+    pub fn new(src: IpAddr, dst: IpAddr) -> IP {
+        IP { src, dst }
+    }
+
     pub fn decode(xs: &[u8]) -> Res<IP> {
         if xs.len() < 8 {
             return Err(Error::NotEnoughBytes);
@@ -30,5 +34,11 @@ impl IP {
         xs.push((self.dst.value >> 8) as u8);
         xs.push(self.dst.value as u8);
         xs
+    }
+}
+
+impl std::fmt::Display for IP {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "IP(dst:{}, src:{})", self.dst, self.src)
     }
 }

@@ -80,6 +80,18 @@ impl EthernetFrame {
     }
 }
 
+impl std::fmt::Display for EthernetFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut payload = "[".to_string();
+        for x in &self.payload {
+            payload = format!("{} {}", payload, x);
+        }
+        payload = format!("{}]", payload);
+        write!(f, "EthernetFrame(dst:{}, src:{}, typ:{}, payload:{})", 
+               self.dst.value, self.src.value, self.ethertype, payload)
+    }
+}
+
 pub struct BaseEthernetDevice {
     pub rbuf: VecDeque<EthernetFrame>,
     pub sbuf: VecDeque<EthernetFrame>,
@@ -120,7 +132,7 @@ impl BaseEthernetDevice {
                     Ok(frame) => {
                         if disp {
                             print!("{:>2}: ", ctx.t);
-                            println!("{}({}): receive: {:?}", self.base.get_name(), self.base.get_mac().value, frame);
+                            println!("{}({}): receive: {:}", self.base.get_name(), self.base.get_mac().value, frame);
                         }
                         self.rlog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
     
@@ -145,7 +157,7 @@ impl BaseEthernetDevice {
         self.slog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
         if disp {
             print!("{:>2}: ", ctx.t);
-            println!("{}({}): send:    {:?}", self.base.get_name(), self.base.get_mac().value, frame);
+            println!("{}({}): send:    {:}", self.base.get_name(), self.base.get_mac().value, frame);
         }
 
         let mut ports = vec![];
