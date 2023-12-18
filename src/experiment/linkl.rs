@@ -4,7 +4,7 @@ use super::types::{Port, Mac, Res, Error};
 use super::utils::{read_6bytes, read_2bytes, split_6bytes, split_2bytes};
 use super::physl::{BaseDevice, Device, UpdateContext, Network};
 
-type Handler = dyn Fn(EthernetFrame) -> Res<Vec<EthernetFrame>>;
+type BytesFn = dyn Fn(&Vec<u8>) -> Res<Option<Vec<u8>>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EthernetFrame {
@@ -93,7 +93,7 @@ impl std::fmt::Display for EthernetFrame {
 }
 
 enum DeviceType {
-    Host,
+    Host(Box<BytesFn>),
     Hub,
 } 
 
@@ -187,9 +187,6 @@ impl BaseEthernetDevice {
         }
     }
 
-
-    // }
-
     pub fn add_forwarding_table(&mut self, dst: Mac, port: Port) {
         self.forward_table.insert(dst, port);
     }
@@ -197,16 +194,15 @@ impl BaseEthernetDevice {
 
 pub struct EthernetDevice {
     base: BaseEthernetDevice,
-    handler: Box<Handler>,
+    // handler: Box<BytesFn>,
     device_type: DeviceType,
     schedules: VecDeque<EthernetLog>,
 }
 
 impl EthernetDevice {
-    fn new(base: BaseEthernetDevice, handler: Box<Handler>, device_type: DeviceType) -> EthernetDevice {
+    fn new(base: BaseEthernetDevice, device_type: DeviceType) -> EthernetDevice {
         EthernetDevice {
             base,
-            handler,
             device_type,
             schedules: VecDeque::new(),
         }
@@ -215,35 +211,27 @@ impl EthernetDevice {
     pub fn build_host(mac: Mac, name: &str) -> Box<EthernetDevice> {
         let base = BaseEthernetDevice::new(mac, name, 1);
         let handler = Box::new(
-            |_frame| Ok(vec![])
+            |_bytes: &Vec<u8>| Ok(None)
         );
-        Box::new(Self::new(base, handler, DeviceType::Host))
+        Box::new(Self::new(base, DeviceType::Host(handler)))
     }
 
     pub fn build_echo_host(mac: Mac, name: &str) -> Box<EthernetDevice> {
         let base = BaseEthernetDevice::new(mac, name, 1);
         let handler = Box::new(
-            |frame| Ok(vec![frame])
+            |bytes: &Vec<u8>| Ok(Some(bytes.clone()))
         );
-        Box::new(Self::new(base, handler, DeviceType::Host))
+        Box::new(Self::new(base, DeviceType::Host(handler)))
     }
 
     pub fn build_bridge(mac: Mac, name: &str) -> Box<EthernetDevice> {
         let base = BaseEthernetDevice::new(mac, name, 2);
-        let handler = Box::new(
-            |frame| 
-            panic!("bridge shouldn't receive frame: {}", frame)
-        );
-        Box::new(Self::new(base, handler, DeviceType::Hub))
+        Box::new(Self::new(base, DeviceType::Hub))
     }
 
     pub fn build_switch(mac: Mac, name: &str, num_ports: usize) -> Box<EthernetDevice> {
         let base = BaseEthernetDevice::new(mac, name, num_ports);
-        let handler = Box::new(
-            |frame| 
-            panic!("switch shouldn't receive frame: {}", frame)
-        );
-        Box::new(Self::new(base, handler, DeviceType::Hub))
+        Box::new(Self::new(base, DeviceType::Hub))
     }
 
     pub fn add_schedule(&mut self, t: usize, frame: EthernetFrame) {
@@ -284,21 +272,15 @@ impl Device for EthernetDevice {
         while let Some(frame) = self.base.pop_rbuf(ctx) {
             let dst = frame.dst;
             let src = frame.src;
-            match self.device_type {
-                DeviceType::Host => {
+            match &self.device_type {
+                DeviceType::Host(f) => {
                     if dst == self.base.base.get_mac() {
-                        let response_frame_list = (self.handler)(frame)?;
-                        match response_frame_list.as_slice() {
-                            [] => {},
-                            [f] => {
-                                // make response frame
-                                let f = EthernetFrame::new(src, dst, f.ethertype, f.payload.clone());
-                                self.base.push_sbuf(f, ctx);
-                            },
-                            _ => panic!("sending of more than 2 frames is not supported")
+                        if let Some(payload) = (f)(&frame.payload)? {
+                            let f = EthernetFrame::new(src, dst, payload.len() as u16, payload);
+                            self.base.push_sbuf(f, ctx);
                         }
                     } else {
-                        // just consume frame
+                        // this frame is not for me. just consume it.
                     }
                 },
                 DeviceType::Hub => {
