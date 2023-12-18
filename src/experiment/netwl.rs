@@ -47,11 +47,12 @@ impl BaseIpDevice {
                 (ip_addr, Port::new(i as u32))
             })
             .collect();
-        let num_ports = ip_addr_ports.len();
+        // let num_ports = ip_addr_ports.len();
         BaseIpDevice {
             rbuf: VecDeque::new(),
             // sbuf: VecDeque::new(),
-            base: BaseEthernetDevice::new(mac, name, num_ports),
+            // FIXME: support hub
+            base: BaseEthernetDevice::new_host(mac, name),
             subnet_mask: SubnetMask::new(24),
             ip_addr_ports: ip_addr_ports,
             routing_table: HashMap::new(),

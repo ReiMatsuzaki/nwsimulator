@@ -92,25 +92,46 @@ impl std::fmt::Display for EthernetFrame {
     }
 }
 
+enum DeviceType {
+    Host,
+    Hub,
+} 
+
 pub struct BaseEthernetDevice {
     pub rbuf: VecDeque<EthernetFrame>,
     pub sbuf: VecDeque<EthernetFrame>,
     forward_table: HashMap<Mac, Port>,
     bufs: HashMap<Port, Vec<u8>>,
     pub base: BaseDevice,
+    device_type: DeviceType,
     schedules: VecDeque<EthernetLog>,
     pub rlog: Vec<EthernetLog>,
     pub slog: Vec<EthernetLog>,
 }
 
 impl BaseEthernetDevice {
-    pub fn new(mac: Mac, name: &str, num_ports: usize) -> BaseEthernetDevice {
+    pub fn new_host(mac: Mac, name: &str) -> BaseEthernetDevice {
+        BaseEthernetDevice {
+            rbuf: VecDeque::new(),
+            sbuf: VecDeque::new(), // FIXME: sbuf isn't used
+            forward_table: HashMap::new(),
+            bufs: HashMap::new(),
+            base: BaseDevice::new(mac, name, 1),
+            device_type: DeviceType::Host,
+            schedules: VecDeque::new(),
+            rlog: Vec::new(),
+            slog: Vec::new(),
+        }
+    }
+
+    pub fn new_hub(mac: Mac, name: &str, num_ports: usize) -> BaseEthernetDevice {
         BaseEthernetDevice {
             rbuf: VecDeque::new(),
             sbuf: VecDeque::new(), // FIXME: sbuf isn't used
             forward_table: HashMap::new(),
             bufs: HashMap::new(),
             base: BaseDevice::new(mac, name, num_ports),
+            device_type: DeviceType::Hub,
             schedules: VecDeque::new(),
             rlog: Vec::new(),
             slog: Vec::new(),
@@ -131,7 +152,7 @@ impl BaseEthernetDevice {
                 match EthernetFrame::decode(xs) {
                     Ok(frame) => {
                         if disp {
-                            print!("{:>2}: ", ctx.t);
+                            print!("{:>3}: ", ctx.t);
                             println!("{}({}): receive: {:}", self.base.get_name(), self.base.get_mac().value, frame);
                         }
                         self.rlog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
@@ -156,7 +177,7 @@ impl BaseEthernetDevice {
         let disp = crate::output::is_frame_level();
         self.slog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
         if disp {
-            print!("{:>2}: ", ctx.t);
+            print!("{:>3}: ", ctx.t);
             println!("{}({}): send:    {:}", self.base.get_name(), self.base.get_mac().value, frame);
         }
 
@@ -192,11 +213,31 @@ impl BaseEthernetDevice {
             }
         }
 
-        // rbuf -> handler -> sbuf
+        // rbuf -> sbuf
         while let Some(frame) = self.pop_rbuf(ctx) {
-            let response_frame_list = handler(frame)?;
-            for f in response_frame_list {
-                self.push_sbuf(f, ctx);
+            let dst = frame.dst;
+            let src = frame.src;
+            match self.device_type {
+                DeviceType::Host => {
+                    if dst == self.base.get_mac() {
+                        let response_frame_list = handler(frame)?;
+                        match response_frame_list.as_slice() {
+                            [] => {},
+                            [f] => {
+                                // make response frame
+                                let f = EthernetFrame::new(src, dst, f.ethertype, f.payload.clone());
+                                self.push_sbuf(f, ctx);
+                            },
+                            _ => panic!("sending of more than 2 frames is not supported")
+                        }
+                    } else {
+                        // just consume frame
+                    }
+                },
+                DeviceType::Hub => {
+                    // this frame is not for me. just forward it.
+                    self.push_sbuf(frame, ctx);
+                }
             }
         }
         Ok(())
@@ -214,27 +255,45 @@ pub struct EthernetDevice {
 }
 
 impl EthernetDevice {
-    fn new(mac: Mac, name: &str, num_ports: usize, handler: Box<Handler>) -> EthernetDevice {
+    fn new(base: BaseEthernetDevice, handler: Box<Handler>) -> EthernetDevice {
         EthernetDevice {
-            base: BaseEthernetDevice::new(mac, name, num_ports),
+            base,
             handler,
-            // schedules: VecDeque::new(),
-            // receive_logs: vec![],
         }
     }
 
     pub fn build_host(mac: Mac, name: &str) -> Box<EthernetDevice> {
+        let base = BaseEthernetDevice::new_host(mac, name);
         let handler = Box::new(
             |_frame| Ok(vec![])
         );
-        Box::new(Self::new(mac, name, 1, handler))
+        Box::new(Self::new(base, handler))
     }
 
-    pub fn build_bridge(mac: Mac, name: &str) -> Box<EthernetDevice> {
+    pub fn build_echo_host(mac: Mac, name: &str) -> Box<EthernetDevice> {
+        let base = BaseEthernetDevice::new_host(mac, name);
         let handler = Box::new(
             |frame| Ok(vec![frame])
         );
-        Box::new(Self::new(mac, name, 2, handler))
+        Box::new(Self::new(base, handler))
+    }
+
+    pub fn build_bridge(mac: Mac, name: &str) -> Box<EthernetDevice> {
+        let base = BaseEthernetDevice::new_hub(mac, name, 2);
+        let handler = Box::new(
+            |frame| 
+            panic!("bridge shouldn't receive frame: {}", frame)
+        );
+        Box::new(Self::new(base, handler))
+    }
+
+    pub fn build_switch(mac: Mac, name: &str, num_ports: usize) -> Box<EthernetDevice> {
+        let base = BaseEthernetDevice::new_hub(mac, name, num_ports);
+        let handler = Box::new(
+            |frame| 
+            panic!("switch shouldn't receive frame: {}", frame)
+        );
+        Box::new(Self::new(base, handler))
     }
 
     pub fn add_schedule(&mut self, t: usize, frame: EthernetFrame) {
@@ -303,6 +362,43 @@ pub fn run_sample() -> Res<EthernetLog> {
     Ok(d.get_slog()[0].clone())
 }
 
+pub fn run_sample_3host() -> Res<EthernetLog> {
+    println!("run experimental linkl 3host sample");
+    crate::output::set_level(crate::output::Level::Frame);
+    let mac0 = Mac::new(21);
+    let mac1 = Mac::new(22);
+    let mac2 = Mac::new(23);
+    let mac3 = Mac::new(24);
+    let mac_s = Mac::new(30);
+
+    let mut host_0 = EthernetDevice::build_host(mac0, "host_a");
+    let host_1 = EthernetDevice::build_echo_host(mac1, "host_b");
+    let host_2 = EthernetDevice::build_echo_host(mac2, "host_c");
+    let host_3 = EthernetDevice::build_host(mac3, "host_d");
+    let switch = EthernetDevice::build_switch(mac_s, "switch", 4);
+
+    let frame = EthernetFrame::new(mac1, mac0, 3, vec![11, 12, 13]);
+    host_0.add_schedule(0, frame.clone());
+
+    let mut nw = Network::new(
+        vec![host_0, host_1, host_2, host_3, switch],
+        vec![]
+    );
+    nw.connect_both(mac_s, Port::new(0), mac0, Port::new(0))?;
+    nw.connect_both(mac_s, Port::new(1), mac1, Port::new(0))?;
+    nw.connect_both(mac_s, Port::new(2), mac2, Port::new(0))?;
+    nw.connect_both(mac_s, Port::new(3), mac3, Port::new(0))?;
+    nw.run(150).unwrap();
+
+    let d = nw.get_device(mac0)?;
+    let d = d.as_any().downcast_ref::<EthernetDevice>().unwrap();
+    println!("{}", d.get_rlog().len());
+    let log = &d.get_rlog()[0];
+    println!("t={}, frame={}", log.t, log.frame);
+    // Ok(d.get_slog()[0].clone())
+    Ok(log.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +409,15 @@ mod tests {
         let mac0 = Mac::new(23);
         let mac1 = Mac::new(24);
         let frame = EthernetFrame::new(mac1, mac0, 3, vec![11, 12, 13]);
+        assert_eq!(frame, log.frame);
+    }
+
+    #[test]
+    fn test_4host_1switch() {
+        let log = run_sample_3host().unwrap();
+        let mac0 = Mac::new(21);
+        let mac1 = Mac::new(22);
+        let frame = EthernetFrame::new(mac0, mac1, 3, vec![11, 12, 13]);
         assert_eq!(frame, log.frame);
     }
 }
