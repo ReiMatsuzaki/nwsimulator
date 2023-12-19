@@ -45,24 +45,33 @@ impl EthernetFrame {
         let dst = Mac::new(read_6bytes(xs, 8));
         let src = Mac::new(read_6bytes(xs, 8 + 6));
         let ty = read_2bytes(xs, 8 + 6 + 6);
-        if ty > 0x05DC {
-            return Err(Error::InvalidBytes {
-                msg: format!("unsupported ethernet type: {}", ty),
-            });
-        } else {
-            // type is length
-            let len = ty as usize;
-            if xs.len() < 8 + 6 + 6 + 2 + len {
-                return Err(Error::NotEnoughBytes);
+        let len = match ty {
+            0x0800 => { 
+                // IPv4
+                let i = 8+6+6+2;
+                if xs.len() < i + 2 + 2 {
+                    return Err(Error::NotEnoughBytes);
+                }
+                read_2bytes(xs, i+2) as usize
             }
-            let payload = Vec::from(&xs[(8 + 6 + 6 + 2)..(8 + 6 + 6 + 2 + len)]);
-            Ok(EthernetFrame {
-                dst,
-                src,
-                ethertype: ty,
-                payload,
-            })
+            0x0806 => 24, // ARP
+            ty if ty <= 0x05DC => ty as usize,
+            _ => {
+                return Err(Error::InvalidBytes {
+                    msg: format!("unsupported ethernet type: {}", ty),
+                });
+            }
+        };
+        if xs.len() < 8 + 6 + 6 + 2 + len {
+            return Err(Error::NotEnoughBytes);
         }
+        let payload = Vec::from(&xs[8+6+6+2..8+6+6+2+len]);
+        Ok(EthernetFrame {
+            dst,
+            src,
+            ethertype: ty,
+            payload,
+        })
     }
 
     pub fn encode(frame: &EthernetFrame) -> Vec<u8> {
@@ -74,7 +83,6 @@ impl EthernetFrame {
             dst[0], dst[1], dst[2], dst[3], dst[4], dst[5], src[0], src[1], src[2], src[3], src[4],
             src[5], et[0], et[1],
         ];
-        // FIXME: avoid clone
         xs.append(&mut frame.payload.clone());
         xs
     }
@@ -367,7 +375,21 @@ pub fn run_sample_3host() -> Res<EthernetLog> {
 
 #[cfg(test)]
 mod tests {
+    use crate::experiment::netwl::{ip::IP, ip_addr::IpAddr};
+
     use super::*;
+
+    #[test]
+    fn test_ethernet_frame() {
+        let ip = IP::new_byte(IpAddr::new(180), IpAddr::new(240), vec![1, 2, 3]);
+        let ip_byte: Vec<u8> = ip.encode();
+        // println!("ip: {:?}", ip_byte);
+        let frame = EthernetFrame::new(Mac::new(1), Mac::new(2), 0x0800, ip_byte);
+        let xs = EthernetFrame::encode(&frame);
+        let frame2 = EthernetFrame::decode(&xs).unwrap();
+        println!("frame: {:?}", frame);
+        assert_eq!(frame, frame2);
+    }
 
     #[test]
     fn test_2host_1bridge() {

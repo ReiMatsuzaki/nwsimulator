@@ -1,4 +1,4 @@
-use crate::experiment::types::{Res, Error};
+use crate::experiment::{types::{Res, Error}, utils::read_2bytes};
 
 use super::ip_addr::IpAddr;
 
@@ -36,10 +36,10 @@ impl IP {
     }
 
     pub fn new_icmp(src: IpAddr, dst: IpAddr, ty: u8, code: u8) -> IP {
-        IP::new(src, dst, 1, IpPayload::ICMP{ty, code})
+        IP::new(src, dst, IpPayload::ICMP{ty, code})
     }
 
-    pub fn new(src: IpAddr, dst: IpAddr, protocol: u8, payload: IpPayload) -> IP {
+    pub fn new(src: IpAddr, dst: IpAddr, payload: IpPayload) -> IP {
         IP { 
             version_ihl: 0x45,
             tos: 0,
@@ -47,7 +47,7 @@ impl IP {
             id: 0,
             flags_fragment_offset: 0,
             ttl: 64,
-            protocol,
+            protocol: payload.protocol(),
             checksum: 0,
             src, 
             dst,
@@ -55,31 +55,55 @@ impl IP {
          }        
     }
 
-
-
     pub fn decode(xs: &[u8]) -> Res<IP> {
+        let xs = Vec::from(xs);
         if xs.len() < 8 {
             return Err(Error::NotEnoughBytes);
         }
         let mut i = 0;
-        let protocol = xs[i];
-        i += 1;
+        let version_ihl = xs[i]; i+= 1;
+        let tos = xs[i]; i+= 1;
+        let total_length = read_2bytes(&xs, i); i+= 2;
+        let id = read_2bytes(&xs, i); i+=2;
+        let flags_fragment_offset = read_2bytes(&xs, i); i+=2;
+        let ttl = xs[i]; i+= 1;
+        let protocol = xs[i]; i+= 1;
+        let checksum = read_2bytes(&xs, i); i+=2;
         // FIXME: deplicated code
-        let src = (xs[i] as u32) << 24 | (xs[i+1] as u32) << 16 | (xs[i+2] as u32) << 8 | (xs[i+3] as u32);
+        let src = IpAddr::new((xs[i] as u32) << 24 | (xs[i+1] as u32) << 16 | (xs[i+2] as u32) << 8 | (xs[i+3] as u32));
         i += 4;
-        let dst = (xs[i] as u32) << 24 | (xs[i+1] as u32) << 16 | (xs[i+2] as u32) << 8 | (xs[i+3] as u32);
+        let dst = IpAddr::new((xs[i] as u32) << 24 | (xs[i+1] as u32) << 16 | (xs[i+2] as u32) << 8 | (xs[i+3] as u32));
         i += 4;
         let payload= if protocol == 1 {
             IpPayload::ICMP { ty: xs[i], code: xs[i+1] }
         } else {
-            IpPayload::Bytes(xs[9..].to_vec())
+            IpPayload::Bytes(xs[i..].to_vec())
         };
-        Ok(IP::new(IpAddr::new(src), IpAddr::new(dst), protocol, payload))
+        Ok(IP { 
+            version_ihl,
+            tos,
+            total_length,
+            id,
+            flags_fragment_offset,
+            ttl,
+            protocol,
+            checksum,
+            src,
+            dst,
+            payload,
+        })
     }
 
     pub fn encode(&self) -> Vec<u8> {
         let mut xs = vec![];
+        xs.push(self.version_ihl);
+        xs.push(self.tos);
+        xs.append(&mut self.total_length.to_be_bytes().to_vec());
+        xs.append(&mut self.id.to_be_bytes().to_vec());
+        xs.append(&mut self.flags_fragment_offset.to_be_bytes().to_vec());
+        xs.push(self.ttl);
         xs.push(self.protocol);
+        xs.append(&mut self.checksum.to_be_bytes().to_vec());
         xs.push((self.src.value >> 24) as u8);
         xs.push((self.src.value >> 16) as u8);
         xs.push((self.src.value >> 8) as u8);
@@ -137,6 +161,13 @@ impl IpPayload {
             IpPayload::ICMP { ty: _, code: _ } => 2,
         }
     }
+
+    fn protocol(&self) -> u8 {
+        match self {
+            IpPayload::Bytes(_) => 0, // it is true
+            IpPayload::ICMP { ty: _, code: _ } => 1,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -147,7 +178,7 @@ mod tests {
     fn test_ip() {
         let ips = vec![
             IP::new_byte(IpAddr::new(0x0a000001), IpAddr::new(0x0a000002), vec![0x01, 0x02, 0x03]),
-            IP::new(IpAddr::new(0x0a000001), IpAddr::new(0x0a000002), 1, IpPayload::ICMP{ty:2, code:3})
+            IP::new(IpAddr::new(0x0a000001), IpAddr::new(0x0a000002), IpPayload::ICMP{ty:2, code:3})
         ];
         for ip in ips {
             let xs = ip.encode();

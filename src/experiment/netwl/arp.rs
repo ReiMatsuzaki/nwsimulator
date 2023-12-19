@@ -4,7 +4,7 @@ use super::super::types::*;
 use super::ip_addr::IpAddr;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ARP {
+pub struct ARP { // total = 24 bytes
     pub hardware_type: u16,
     pub protocol_type: u16,
     pub hardware_size: u8,
@@ -17,6 +17,20 @@ pub struct ARP {
 }
 
 impl ARP {
+    pub fn new_request(sender_mac: Mac, sender_ipaddr: IpAddr, target_ipaddr: IpAddr) -> ARP {
+        ARP {
+            hardware_type: 1,
+            protocol_type: 0x0800,
+            hardware_size: 6,
+            protocol_size: 4,
+            opcode: 1,// 1 is request
+            sender_mac,
+            sender_ipaddr,
+            target_mac: Mac::new(0),
+            target_ipaddr,
+        }
+    }
+
     pub fn reply(&self, target_mac: Mac) -> ARP {
         ARP {
             hardware_type: self.hardware_type,
@@ -86,6 +100,23 @@ impl ARP {
         xs
     }
 }
+
+
+impl std::fmt::Display for ARP {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // FIXME: duplicated code
+        let s = match self.opcode {
+            1 => "request",
+            2 => "reply",
+            _ => "unknown",
+        };
+        write!(f, "ARP(op:{}, sender_mac:{}, sender_ipaddr:{}, target_mac:{}, target_ipaddr: {})", 
+               s,
+               self.sender_mac.value, self.sender_ipaddr, self.target_mac.value, self.target_ipaddr)
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {

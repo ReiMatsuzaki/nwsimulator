@@ -20,6 +20,15 @@ pub enum NetworkProtocol {
     ARP(ARP),
 }
 
+impl std::fmt::Display for NetworkProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            NetworkProtocol::IP(ip) => write!(f, "{}", ip),
+            NetworkProtocol::ARP(arp) => write!(f, "{}", arp),
+        }
+    }
+}
+
 // impl NetworkProtocol {
 //     pub fn encode(&self) -> Vec<u8> {
 //         match self {
@@ -65,25 +74,32 @@ impl BaseIpDevice {
     pub fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
         let disp = crate::output::is_frame_level();
 
-        // FIXME: update route table
         while let Some(frame) = self.base.pop_rbuf(ctx) {
 
-            if let Ok(ip) = IP::decode(&frame.payload) {
-                if disp {
-                    print!("{:>3}: ", ctx.t);
-                    // FIXME: print ip address correct
-                    println!("{}({}): receive: {:}", 
-                             self.base.base.get_name(), 
-                             self.ip_addr_ports[0].0, ip);
+            let p = match frame.ethertype {
+                0x0800 => { 
+                    // IPv4
+                    let ip = IP::decode(&frame.payload)?;
+                    // FIXME: update here?
+                    self.add_arp_entry(ip.src, frame.src)?;
+                    NetworkProtocol::IP(ip)
                 }
-                self.add_arp_entry(ip.src, frame.src)?;
-
-                self.rbuf.push_back(NetworkProtocol::IP(ip));
-            } else if let Ok(arp) = ARP::decode(&frame.payload) {
-                self.rbuf.push_back(NetworkProtocol::ARP(arp));
-            } else {
-                return Err(Error::InvalidBytes { msg: "IP".to_string() })
+                0x0806 => { 
+                    // ARP 
+                    let arp = ARP::decode(&frame.payload)?;
+                    NetworkProtocol::ARP(arp)
+                }
+                _ => return Err(Error::InvalidBytes { msg: "IP".to_string() })
+            };
+            if disp {
+                print!("{:>3}: ", ctx.t);
+                // FIXME: print ip address correct
+                println!("{}({}): receive: {:}", 
+                         self.base.base.get_name(), 
+                         self.ip_addr_ports[0].0, p);
             }
+
+            self.rbuf.push_back(p);
         }
         Ok(self.rbuf.pop_front())
     }
@@ -129,7 +145,7 @@ impl BaseIpDevice {
 
         let src_mac = self.base.base.get_mac();
         let payload = p.encode();
-        let ethertype = payload.len() as u16;
+        let ethertype = 0x0800;
         let frame = EthernetFrame::new(*dst_mac, src_mac, ethertype, payload);
         self.base.push_sbuf(frame, ctx);
 
@@ -137,10 +153,24 @@ impl BaseIpDevice {
     }
 
     fn push_sbuf_arp(&mut self, arp: ARP, ctx: &UpdateContext) -> Res<()> {
+        let disp = crate::output::is_frame_level();
+        if disp {
+            print!("{:>3}: ", ctx.t);
+            // FIXME: print ip address correct
+            println!("{}({}): send   : {:}", 
+                     self.base.base.get_name(), 
+                     self.ip_addr_ports[0].0, arp);
+        }
+
+
         let src_mac = self.base.base.get_mac();
-        let dst_mac = Mac::new(999); // FIXME: broadcast
+        let dst_mac = match arp.opcode {
+            1 => Mac::new(999), // request // FIXME: broadcast
+            2 => arp.target_mac,// reply
+            _ => panic!("invalid arp opcode"),
+        };
         let payload = arp.encode();
-        let ethertype = payload.len() as u16;
+        let ethertype = 0x0806;
         let frame = EthernetFrame::new(dst_mac, src_mac, ethertype, payload);
         self.base.push_sbuf(frame, ctx);
 
@@ -253,6 +283,7 @@ impl Device for IpHost {
         Ok(())
     }
 }
+
 impl IpHost {
     fn update_ip(&mut self, ip: &IP, ctx: &UpdateContext) -> Res<()> {
             if ip.dst == self.get_ip_addr() {
@@ -335,14 +366,17 @@ impl Router {
     }
 
     fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext) -> Res<()> {
-        let p = match p {
-            NetworkProtocol::IP(ip) => ip,
-            NetworkProtocol::ARP(_) => panic!("ARP is not supported yet"),
-        };
+        match p {
+            NetworkProtocol::IP(ip) => self.push_sbuf_ip(ip, ctx),
+            NetworkProtocol::ARP(arp) => self.push_sbuf_arp(arp, ctx),
+        }
+    }
 
+    fn push_sbuf_ip(&mut self, ip: IP, ctx: &UpdateContext) -> Res<()> {
         // FIXME: how to determine src_ip here ?
         // FIXME: port
         // let port_receive = Port::new(0);
+        let p = ip;
         let dst_nw_part = NetworkPart::new(p.dst, self.base.subnet_mask);
         let dst_mac = if let Some(port) = self.base.find_port(&dst_nw_part) {
             // dst is in same network
@@ -397,9 +431,31 @@ impl Router {
 
         let src_mac = self.get_mac();
         let payload = p.encode();
-        let ethertype = payload.len() as u16;
+        let ethertype = 0x0800;
         let frame = EthernetFrame::new(*dst_mac, src_mac, ethertype, payload);
         self.base.base.push_sbuf(frame, ctx);
+
+        Ok(())
+    }
+
+    fn push_sbuf_arp(&mut self, arp: ARP, ctx: &UpdateContext) -> Res<()> {
+        // FIXME: this code should be in Update
+        // FIXME: duplicated code
+        if arp.target_ipaddr == self.base.ip_addr_ports[0].0 {
+            match arp.opcode {
+                1  => { // FIXME: request
+                    let arp = arp.reply(self.get_mac());
+                    let arp = NetworkProtocol::ARP(arp);
+                    self.base.push_sbuf(arp, ctx)?;
+                },
+                2 => { // FIXME: reply
+                    self.base.add_arp_entry(arp.sender_ipaddr, arp.sender_mac)?;
+                },
+                _ => panic!("invalid arp opcode"),
+            }
+        } else {
+            // do nothing
+        }
 
         Ok(())
     }
@@ -567,8 +623,8 @@ pub fn run_2router() -> Res<()> {
     nw.connect_both(mac_3, Port::new(1), mac_d, Port::new(0))?;
     nw.connect_both(mac_3, Port::new(2), mac_s, Port::new(0))?;
 
-    nw.run(400).unwrap();
-    let d = nw.get_device(Mac::new(761)).unwrap();
+    nw.run(550).unwrap();
+    let d = nw.get_device(mac_a)?;
     let d = d.as_any().downcast_ref::<IpHost>().unwrap();
     let rlogs = d.get_rlog();
     assert_eq!(1, rlogs.len());
@@ -652,6 +708,50 @@ pub fn run_unreachable() -> Res<()> {
     res
 }
 
+pub fn run_test_arp() -> Res<()> {
+    crate::output::set_level(crate::output::Level::Frame);
+    let subnet_mask = SubnetMask::new(24);
+    let addr_a = IpAddr::new(0x0a00_0001);
+    let addr_b = IpAddr::new(0x0a00_0002);
+    let addr_r = IpAddr::new(0x0a00_0003);
+
+    let mac_a = Mac::new(761);
+    let mac_b = Mac::new(762);
+    let mac_s = Mac::new(763);
+    let mac_r = Mac::new(764);
+
+    let mut host_a = IpHost::new_echo(mac_a, "hostA", addr_a, subnet_mask);
+    let arp0 = ARP::new_request(host_a.get_mac(), host_a.get_ip_addr(), addr_r);
+    host_a.add_schedule(0, NetworkProtocol::ARP(arp0));
+    // host_a.add_arp_entry(addr_b, mac_b)?;
+
+    let host_b = IpHost::new_echo(mac_b, "hostB", addr_b, subnet_mask);
+    let switch = EthernetDevice::build_switch(mac_s, "switch", 3);
+    let router = Router::box_new(mac_r, "router", vec![addr_r], subnet_mask);
+
+    let mut nw = Network::new(
+        vec![host_a, host_b, switch, router],
+        vec![]
+    );
+    nw.connect_both(mac_s, Port::new(0), mac_a, Port::new(0))?;
+    nw.connect_both(mac_s, Port::new(1), mac_b, Port::new(0))?;
+    nw.connect_both(mac_s, Port::new(2), mac_r, Port::new(0))?;
+
+    nw.run(250).unwrap();
+
+    let d = nw.get_device(mac_a).unwrap();
+    let d = d.as_any().downcast_ref::<IpHost>().unwrap();
+    assert_eq!(1, d.base.arp_table.len());
+    let (ipaddr, mac ) = d.base.arp_table.iter().next().unwrap();
+    for (ipaddr, mac) in d.base.arp_table.iter() {
+        println!("arp table: {:} : {:}", ipaddr, mac.value);
+    }
+    // println!("arp table: {:?}", d.base.arp_table);
+    assert_eq!(addr_r, *ipaddr);
+    assert_eq!(mac_r, *mac);
+    Ok(())        
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -683,5 +783,9 @@ mod tests {
             _ => assert!(false),
         }
     }
-    
+
+    #[test]
+    fn test_arp() {
+        run_test_arp().unwrap();
+    }
 }
