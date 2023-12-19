@@ -33,6 +33,7 @@ fn main() -> io::Result<()> {
         30 => { experiment::netwl::run_host_host().unwrap(); }
         31 => { experiment::netwl::run_2host_1router().unwrap(); }
         32 => { experiment::netwl::run_2router().unwrap(); }
+        33 => { experiment::netwl::run_unreachable().unwrap(); }
         _ => println!("No such run number"),
     }
 

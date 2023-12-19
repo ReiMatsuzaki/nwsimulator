@@ -19,7 +19,6 @@ pub struct IP {
 }
 
 impl IP {
-    // FIXME: rename
     pub fn new_byte(src: IpAddr, dst: IpAddr, payload: Vec<u8>) -> IP {
         IP { 
             version_ihl: 0x45,
@@ -36,7 +35,10 @@ impl IP {
          }
     }
 
-    // FIXME: rename
+    pub fn new_icmp(src: IpAddr, dst: IpAddr, ty: u8, code: u8) -> IP {
+        IP::new(src, dst, 1, IpPayload::ICMP{ty, code})
+    }
+
     pub fn new(src: IpAddr, dst: IpAddr, protocol: u8, payload: IpPayload) -> IP {
         IP { 
             version_ihl: 0x45,
@@ -52,6 +54,8 @@ impl IP {
             payload,
          }        
     }
+
+
 
     pub fn decode(xs: &[u8]) -> Res<IP> {
         if xs.len() < 8 {
