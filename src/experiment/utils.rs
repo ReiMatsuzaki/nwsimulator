@@ -3,6 +3,13 @@ pub fn read_2bytes(xs: &Vec<u8>, offset: usize) -> u16 {
     (xs[offset] as u16) << 8 | (xs[offset + 1] as u16)
 }
 
+pub fn read_4bytes(xs: &Vec<u8>, offset: usize) -> u32 {
+    (xs[offset + 0] as u32) << 24
+    | (xs[offset + 1] as u32) << 16
+    | (xs[offset + 2] as u32) << 8
+    | (xs[offset + 3] as u32)
+}
+
 pub fn read_6bytes(xs: &Vec<u8>, offset: usize) -> u64 {
     (xs[offset] as u64) << 40
         | (xs[offset + 1] as u64) << 32
