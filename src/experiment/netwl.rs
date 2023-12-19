@@ -89,11 +89,15 @@ impl BaseIpDevice {
     }
 
     pub fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext) -> Res<()> {
-        let p = match p {
-            NetworkProtocol::IP(ip) => ip,
-            NetworkProtocol::ARP(_) => panic!("ARP is not supported yet"),
+        match p {
+            NetworkProtocol::IP(ip) => self.push_sbuf_ip(ip, ctx)?,
+            NetworkProtocol::ARP(arp) => self.push_sbuf_arp(arp, ctx)?,
         };
+        Ok(())
+    }
 
+    fn push_sbuf_ip(&mut self, p: IP, ctx: &UpdateContext) -> Res<()> {
+        // FIXME: how to determine src_ip here ?
         let disp = crate::output::is_frame_level();
         if disp {
             print!("{:>3}: ", ctx.t);
@@ -102,8 +106,6 @@ impl BaseIpDevice {
                      self.base.base.get_name(), 
                      self.ip_addr_ports[0].0, p);
         }
-
-        // FIXME: how to determine src_ip here ?
 
         let dst_nw_part = NetworkPart::new(p.dst, self.subnet_mask);
         let dst_mac = if let Some(port) = self.find_port(&dst_nw_part) {
@@ -129,6 +131,17 @@ impl BaseIpDevice {
         let payload = p.encode();
         let ethertype = payload.len() as u16;
         let frame = EthernetFrame::new(*dst_mac, src_mac, ethertype, payload);
+        self.base.push_sbuf(frame, ctx);
+
+        Ok(())
+    }
+
+    fn push_sbuf_arp(&mut self, arp: ARP, ctx: &UpdateContext) -> Res<()> {
+        let src_mac = self.base.base.get_mac();
+        let dst_mac = Mac::new(999); // FIXME: broadcast
+        let payload = arp.encode();
+        let ethertype = payload.len() as u16;
+        let frame = EthernetFrame::new(dst_mac, src_mac, ethertype, payload);
         self.base.push_sbuf(frame, ctx);
 
         Ok(())
@@ -232,11 +245,16 @@ impl Device for IpHost {
         while let Some(p) = self.base.pop_rbuf(ctx)? {
             self.rlog.push(NetworkLog { t: ctx.t, p: p.clone() });
 
-            let ip = match p {
-                NetworkProtocol::IP(ip) => ip,
-                _ => panic!("not supported yet"),
+            match p {
+                NetworkProtocol::IP(ip) => self.update_ip(&ip, ctx)?,
+                NetworkProtocol::ARP(arp) => self.update_arp(&arp, ctx)?,
             };
-
+        }
+        Ok(())
+    }
+}
+impl IpHost {
+    fn update_ip(&mut self, ip: &IP, ctx: &UpdateContext) -> Res<()> {
             if ip.dst == self.get_ip_addr() {
                 // FIXME
                 // prepare respnse and send to src
@@ -261,7 +279,6 @@ impl Device for IpHost {
                     }
                 }
             }
-        }
         Ok(())
 
         // let f = &mut |p: NetworkProtocol| {
@@ -277,6 +294,25 @@ impl Device for IpHost {
         //     }
         // };
         // self.base.update(ctx, f)
+    }
+
+    fn update_arp(&mut self, arp: &ARP, ctx: &UpdateContext) -> Res<()> {
+        if arp.target_ipaddr == self.get_ip_addr() {
+            match arp.opcode {
+                1  => {
+                    let arp = arp.reply(self.get_mac());
+                    let arp = NetworkProtocol::ARP(arp);
+                    self.base.push_sbuf(arp, ctx)?;
+                },
+                2 => {
+                    self.base.add_arp_entry(arp.sender_ipaddr, arp.sender_mac)?;
+                },
+                _ => panic!("invalid arp opcode"),
+            }
+        } else {
+            // do nothing
+        }
+        Ok(())
     }
 }
 

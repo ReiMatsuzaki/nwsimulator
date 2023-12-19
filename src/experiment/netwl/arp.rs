@@ -5,18 +5,32 @@ use super::ip_addr::IpAddr;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ARP {
-    hardware_type: u16,
-    protocol_type: u16,
-    hardware_size: u8,
-    protocol_size: u8,
-    opcode: u16,
-    sender_mac: Mac, // u32
-    sender_ipaddr: IpAddr,
-    target_mac: Mac,
-    target_ipaddr: IpAddr,
+    pub hardware_type: u16,
+    pub protocol_type: u16,
+    pub hardware_size: u8,
+    pub protocol_size: u8,
+    pub opcode: u16,
+    pub sender_mac: Mac, // u32
+    pub sender_ipaddr: IpAddr,
+    pub target_mac: Mac,
+    pub target_ipaddr: IpAddr,
 }
 
 impl ARP {
+    pub fn reply(&self, target_mac: Mac) -> ARP {
+        ARP {
+            hardware_type: self.hardware_type,
+            protocol_type: self.protocol_type,
+            hardware_size: self.hardware_size,
+            protocol_size: self.protocol_size,
+            opcode: 2, // 2: replay
+            sender_mac: target_mac,
+            sender_ipaddr: self.target_ipaddr,
+            target_mac: self.sender_mac,
+            target_ipaddr: self.sender_ipaddr,
+        }
+    }
+
     pub fn decode(xs: &[u8]) -> Res<ARP> {
         let xs = Vec::from(xs);
         if xs.len() < 24 {
