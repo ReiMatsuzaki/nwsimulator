@@ -232,15 +232,34 @@ impl Device for IpHost {
             if ip.dst == self.get_ip_addr() {
                 // FIXME
                 // prepare respnse and send to src
-                let payload = (self.payload_fn)(&ip.payload);
-                match payload {
-                    None => {}
-                    Some(payload) => {
-                        let ip = IP::new(ip.dst, ip.src, payload);
-                        let ip = NetworkProtocol::IP(ip);
-                        self.base.push_sbuf(ip, ctx)?;
+                match &ip.payload {
+                    IpPayload::Bytes(xs) => {
+                        let payload = (self.payload_fn)(xs);
+                        match payload {
+                            None => {}
+                            Some(payload) => {
+                                let ip = IP::new_byte(ip.dst, ip.src, payload);
+                                let ip = NetworkProtocol::IP(ip);
+                                self.base.push_sbuf(ip, ctx)?;
+                            }
+                        }
+                    },
+                    _ => {
+                        panic!("response for ICMP not implemented yet");
+                        // let ip = IP::new(ip.dst, ip.src, IpPayload::ICMP { ty: *ty, code: *code });
+                        // let ip = NetworkProtocol::IP(ip);
+                        // self.base.push_sbuf(ip, ctx)?;
                     }
                 }
+                // let payload = (self.payload_fn)();
+                // match payload {
+                //     None => {}
+                //     Some(payload) => {
+                //         let ip = IP::new(ip.dst, ip.src, payload);
+                //         let ip = NetworkProtocol::IP(ip);
+                //         self.base.push_sbuf(ip, ctx)?;
+                //     }
+                // }
             }
         }
         Ok(())
@@ -377,7 +396,7 @@ pub fn run_host_host() -> Res<()> {
     let subnet_mask = SubnetMask::new(24);
     let addr0 = IpAddr::new(0x0a00_0001);
     let addr1 = IpAddr::new(0x0a00_0002);
-    let ip0 = IP::new(addr0, addr1, vec![0x01, 0x02]);
+    let ip0 = IP::new_byte(addr0, addr1, vec![0x01, 0x02]);
     let mac0 = Mac::new(761);
     let mac1 = Mac::new(762);
     let port0 = Port::new(0);
@@ -413,7 +432,7 @@ pub fn run_2host_1router() -> Res<()> {
     let mac_r = Mac::new(764);
 
     let mut host_a = IpHost::new_echo(mac_a, "hostA", addr_a, subnet_mask);
-    let ip0 = IP::new(addr_a, addr_b, vec![0x01, 0x02]);
+    let ip0 = IP::new_byte(addr_a, addr_b, vec![0x01, 0x02]);
     host_a.add_schedule(0, NetworkProtocol::IP(ip0));
     host_a.add_arp_entry(addr_b, mac_b)?;
 
@@ -468,7 +487,7 @@ pub fn run_2router() -> Res<()> {
     let switch_1 = EthernetDevice::build_switch(mac_1, "switch1", 3);
     let switch_3 = EthernetDevice::build_switch(mac_3, "switch3", 3);
 
-    let ip0 = IP::new(addr_1a, addr_3d, vec![0x01, 0x02]);
+    let ip0 = IP::new_byte(addr_1a, addr_3d, vec![0x01, 0x02]);
     host_a.add_schedule(0, NetworkProtocol::IP(ip0));
     host_a.add_arp_entry(addr_1r, mac_r)?;
     host_d.add_arp_entry(addr_3s, mac_s)?;
