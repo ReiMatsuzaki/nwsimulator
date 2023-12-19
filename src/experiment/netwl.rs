@@ -215,6 +215,7 @@ pub struct IpHost {
     payload_fn: Box<PayloadFn>,
     slog: Vec<NetworkLog>,
     rlog: Vec<NetworkLog>,
+    arp_rep_waitings: Vec<IP>,
 }
 
 impl IpHost {
@@ -228,6 +229,7 @@ impl IpHost {
             payload_fn: Box::new(f),
             slog: Vec::new(),
             rlog: Vec::new(),
+            arp_rep_waitings: Vec::new(),
         };
         Box::new(host)
     }
@@ -252,6 +254,11 @@ impl IpHost {
         &self.rlog
     }
 
+    fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext) -> Res<()> {
+        self.slog.push(NetworkLog { t: ctx.t, p: p.clone() });
+        self.base.push_sbuf(p, ctx)
+    }
+
     fn update_ip(&mut self, ip: &IP, ctx: &UpdateContext) -> Res<()> {
         if ip.dst == self.get_ip_addr() {
             // FIXME
@@ -264,13 +271,34 @@ impl IpHost {
                         Some(payload) => {
                             let ip = IP::new_byte(ip.dst, ip.src, payload);
                             let ip = NetworkProtocol::IP(ip);
-                            self.slog.push(NetworkLog { t: ctx.t, p: ip.clone() });
-                            self.base.push_sbuf(ip, ctx)?;
+                            self.push_sbuf(ip, ctx)?;
                         }
                     }
                 },
                 IpPayload::ICMP { ty, code } if (*ty == 3) => {
                     return Err(Error::IpUnreashcable { code: *code, msg: "".to_string() });
+    
+                    // FIXME: sending ARP is not correct
+                    // let p = self.slog.iter()
+                    // .filter_map( |x| {
+                    //     match x.p {
+                    //         NetworkProtocol::IP(ref p) => Some(p),
+                    //         _ => None,
+                    //     }
+                    // })
+                    // .find(|_p| {
+                    //     // FIXME: filter by ID
+                    //     // p.dst == ip.src && p.src == ip.dst                        
+                    //     true
+                    // });
+                    // if let Some(p) = p {
+                    //     let arp = ARP::new_request(self.get_mac(), self.get_ip_addr(), p.dst);
+                    //     let arp = NetworkProtocol::ARP(arp);
+                    //     self.push_sbuf(arp, ctx)?;
+                    // } else {
+                    //     // println!("slog={:?}", self.slog);
+                    //     panic!("ICMP(unreachable) received but original IP does not found");
+                    // }
                 },
                 _ => {
                     panic!("not implemented ip payload. payload={:?}", ip.payload);
@@ -304,6 +332,11 @@ impl IpHost {
                 },
                 2 => {
                     self.base.add_arp_entry(arp.sender_ipaddr, arp.sender_mac)?;
+                    if let Some((i, ip))= self.arp_rep_waitings.iter().enumerate().find(|(_t, x)| x.dst == arp.sender_ipaddr) {
+                        let ip = NetworkProtocol::IP(ip.clone());
+                        self.base.push_sbuf(ip, ctx)?;
+                        self.arp_rep_waitings.remove(i);
+                    }
                 },
                 _ => panic!("invalid arp opcode"),
             }
@@ -328,9 +361,11 @@ impl Device for IpHost {
     }
 
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        for (t, p) in self.schedules.iter() {
+        for idx in 0..self.schedules.len() {
+            let (t, p) = &self.schedules[idx];
             if *t == ctx.t {
-                self.base.push_sbuf(p.clone(), ctx)?;
+                let p = p.clone();
+                self.push_sbuf(p, ctx)?;
             }
         }
         while let Some(p) = self.base.pop_rbuf(ctx)? {
