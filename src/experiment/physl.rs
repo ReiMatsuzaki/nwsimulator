@@ -172,6 +172,7 @@ pub struct Network {
 }
 
 impl Network {
+    // FIXME: avoid box, remove medias
     pub fn new(devices: Vec<Box<dyn Device>>, medias: Vec<Connection>) -> Network {
         Network {
             devices,

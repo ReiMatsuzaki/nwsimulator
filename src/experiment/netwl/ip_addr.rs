@@ -7,6 +7,10 @@ impl IpAddr {
     pub fn new(value: u32) -> IpAddr {
         IpAddr { value }
     }
+
+    pub fn nw(&self, subnet_mask: SubnetMask) -> NetworkPart {
+        NetworkPart::new(*self, subnet_mask)
+    }
 }
 
 impl std::fmt::Display for IpAddr {
