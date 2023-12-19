@@ -251,6 +251,67 @@ impl IpHost {
     fn get_rlog(&self) -> &Vec<NetworkLog> {
         &self.rlog
     }
+
+    fn update_ip(&mut self, ip: &IP, ctx: &UpdateContext) -> Res<()> {
+        if ip.dst == self.get_ip_addr() {
+            // FIXME
+            // prepare respnse and send to src
+            match &ip.payload {
+                IpPayload::Bytes(xs) => {
+                    let payload = (self.payload_fn)(xs);
+                    match payload {
+                        None => {}
+                        Some(payload) => {
+                            let ip = IP::new_byte(ip.dst, ip.src, payload);
+                            let ip = NetworkProtocol::IP(ip);
+                            self.slog.push(NetworkLog { t: ctx.t, p: ip.clone() });
+                            self.base.push_sbuf(ip, ctx)?;
+                        }
+                    }
+                },
+                IpPayload::ICMP { ty, code } if (*ty == 3) => {
+                    return Err(Error::IpUnreashcable { code: *code, msg: "".to_string() });
+                },
+                _ => {
+                    panic!("not implemented ip payload. payload={:?}", ip.payload);
+                }
+            }
+        }
+    Ok(())
+
+    // let f = &mut |p: NetworkProtocol| {
+    //     match p {
+    //         NetworkProtocol::IP(ip) => {
+    //             let ip = IP::new(ip.dst, ip.src);
+    //             let ip = NetworkProtocol::IP(ip);
+    //             vec![ip]
+    //         },
+    //         NetworkProtocol::ARP(_arp) => {
+    //             vec![]
+    //         },
+    //     }
+    // };
+    // self.base.update(ctx, f)
+}
+
+    fn update_arp(&mut self, arp: &ARP, ctx: &UpdateContext) -> Res<()> {
+        if arp.target_ipaddr == self.get_ip_addr() {
+            match arp.opcode {
+                1  => {
+                    let arp = arp.reply(self.get_mac());
+                    let arp = NetworkProtocol::ARP(arp);
+                    self.base.push_sbuf(arp, ctx)?;
+                },
+                2 => {
+                    self.base.add_arp_entry(arp.sender_ipaddr, arp.sender_mac)?;
+                },
+                _ => panic!("invalid arp opcode"),
+            }
+        } else {
+            // do nothing
+        }
+        Ok(())
+    }
 }
 
 impl Device for IpHost {
@@ -284,68 +345,6 @@ impl Device for IpHost {
     }
 }
 
-impl IpHost {
-    fn update_ip(&mut self, ip: &IP, ctx: &UpdateContext) -> Res<()> {
-            if ip.dst == self.get_ip_addr() {
-                // FIXME
-                // prepare respnse and send to src
-                match &ip.payload {
-                    IpPayload::Bytes(xs) => {
-                        let payload = (self.payload_fn)(xs);
-                        match payload {
-                            None => {}
-                            Some(payload) => {
-                                let ip = IP::new_byte(ip.dst, ip.src, payload);
-                                let ip = NetworkProtocol::IP(ip);
-                                self.slog.push(NetworkLog { t: ctx.t, p: ip.clone() });
-                                self.base.push_sbuf(ip, ctx)?;
-                            }
-                        }
-                    },
-                    IpPayload::ICMP { ty, code } if (*ty == 3) => {
-                        return Err(Error::IpUnreashcable { code: *code, msg: "".to_string() });
-                    },
-                    _ => {
-                        panic!("not implemented ip payload. payload={:?}", ip.payload);
-                    }
-                }
-            }
-        Ok(())
-
-        // let f = &mut |p: NetworkProtocol| {
-        //     match p {
-        //         NetworkProtocol::IP(ip) => {
-        //             let ip = IP::new(ip.dst, ip.src);
-        //             let ip = NetworkProtocol::IP(ip);
-        //             vec![ip]
-        //         },
-        //         NetworkProtocol::ARP(_arp) => {
-        //             vec![]
-        //         },
-        //     }
-        // };
-        // self.base.update(ctx, f)
-    }
-
-    fn update_arp(&mut self, arp: &ARP, ctx: &UpdateContext) -> Res<()> {
-        if arp.target_ipaddr == self.get_ip_addr() {
-            match arp.opcode {
-                1  => {
-                    let arp = arp.reply(self.get_mac());
-                    let arp = NetworkProtocol::ARP(arp);
-                    self.base.push_sbuf(arp, ctx)?;
-                },
-                2 => {
-                    self.base.add_arp_entry(arp.sender_ipaddr, arp.sender_mac)?;
-                },
-                _ => panic!("invalid arp opcode"),
-            }
-        } else {
-            // do nothing
-        }
-        Ok(())
-    }
-}
 
 #[derive(Debug)]
 struct NetworkLog {
