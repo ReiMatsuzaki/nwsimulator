@@ -9,6 +9,7 @@ use super::ip::*;
 use super::arp::*;
 use super::ip_addr::*;
 
+/*
 pub struct BaseIpDevice {
     rbuf: VecDeque<NetworkProtocol>,
     // sbuf: VecDeque<Protocol>,
@@ -207,6 +208,7 @@ impl BaseIpDevice {
     }
 
 }
+*/
 
 type BytesFn = dyn Fn(&Vec<u8>) -> Res<Vec<u8>>;
 
@@ -252,8 +254,6 @@ impl IpDevice {
     }
 
     pub fn new_host(mac: Mac, name: &str, ip_addr: IpAddr, subnet_mask: SubnetMask, ip_handler: Box<BytesFn>) -> Box<IpDevice> {
-        let ip_addr_ports = vec![(ip_addr, Port::new(0))];
-        let base = BaseEthernetDevice::new(mac, name, ip_addr_ports.len());
         IpDevice::new(mac, name, vec![ip_addr], subnet_mask, ip_handler)
     }            
 
@@ -292,7 +292,7 @@ impl IpDevice {
                 panic!("failed to find in arp table");
             }
         } else {
-            panic!("failed to find dst_nw_part. dst_nw_part={:}", nw_part);
+            Err(Error::MacNotFailed)
         }
     }
 
@@ -318,6 +318,10 @@ impl IpDevice {
         .map(|(ip_addr, _)| *ip_addr)
     }
 
+    pub fn get_arp_table(&self) -> &HashMap<IpAddr, Mac> {
+        &self.arp_table
+    }
+
     pub fn add_arp_entry(&mut self, ip_addr: IpAddr, mac: Mac) -> Res<()> {
         self.arp_table.insert(ip_addr, mac);
         Ok(())
@@ -333,7 +337,8 @@ impl IpDevice {
     }
 
     fn decode(&self, frame: &EthernetFrame) -> Res<Option<NetworkProtocol>> {
-        if frame.dst != self.get_mac() {
+        // FIXME: broadcast
+        if frame.dst != self.get_mac() && frame.dst != Mac::new(999) { 
             return Ok(None)
         }
         let p = match frame.ethertype {
@@ -425,7 +430,7 @@ impl IpDevice {
                 }
                 2 => { // reply
                     // FIXME: add arp table
-                    self.add_arp_entry(arp.sender_ipaddr, arp.target_mac)?;
+                    self.add_arp_entry(arp.sender_ipaddr, arp.sender_mac)?;
                     Ok(None)
                 }
                 _ => panic!("invalid arp opcode"),
@@ -480,6 +485,16 @@ impl IpDevice {
         }
         Ok(())
     }
+
+    fn unreachable(&mut self, p: NetworkProtocol) -> NetworkProtocol {
+        let dst = match p {
+            NetworkProtocol::IP(ip) => ip.src,
+            _ => panic!("unreachable for ARP is not supported"),
+        };
+        let src = self.ip_addr_ports[0].0;
+        let ip = IP::new_icmp(src, dst, 3, 1);
+        NetworkProtocol::IP(ip)
+    }
 }
 
 impl Device for IpDevice {
@@ -502,7 +517,7 @@ impl Device for IpDevice {
 
         for s in &self.schedules {
             if s.t == ctx.t {
-                rbuf.push_back(s.p.clone());
+                sbuf.push_back(s.p.clone());
             }
         }
 
@@ -515,13 +530,21 @@ impl Device for IpDevice {
 
         while let Some(p) = rbuf.pop_front() {
             if let Some(p) = self.handle(&p)? {
-                self.add_slog(&p, ctx);
                 sbuf.push_back(p);
             }
         }
 
         while let Some(p) = sbuf.pop_front() {
-            let frame = self.encode(&p)?;
+            let frame = match self.encode(&p) {
+                Ok(frame) => frame,
+                Err(Error::MacNotFailed) => {
+                    let ip = self.unreachable(p);
+                    sbuf.push_back(ip);
+                    continue;
+                },
+                Err(e) => return Err(e)
+            };
+            self.add_slog(&p, ctx);
             self.push_frame(frame, ctx);
         }
 

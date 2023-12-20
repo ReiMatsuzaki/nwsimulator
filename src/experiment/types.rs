@@ -29,6 +29,8 @@ pub enum Error {
     ConnectionNotFound { mac: Mac, port: Port },
     // LinklError { e: LinklError },
     InvalidBytes { msg: String },
+    // NotifyError(IP),
+    MacNotFailed,
     IpUnreashcable { code: u8, msg: String },
 }
 
@@ -51,7 +53,10 @@ impl fmt::Display for Error {
                 // write!(f, "LinklError: {:?}", e),
             Error::InvalidBytes { msg } => 
                 write!(f, "Invalid bytes, {}", msg),
-
+            // Error::NotifyError(_ip) =>
+            //     write!(f, "notify error"),
+            Error::MacNotFailed => 
+                write!(f, "Mac not failed"),
             Error::IpUnreashcable { code, msg } => 
                 write!(f, "IP unreachable error. code={}, msg={}", code, msg )
         }
