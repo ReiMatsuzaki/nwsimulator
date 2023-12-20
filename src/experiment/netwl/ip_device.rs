@@ -3,7 +3,7 @@ use crate::experiment::physl::Device;
 
 use super::super::types::*;
 use super::super::physl::UpdateContext;
-use super::super::linkl::{BaseEthernetDevice, EthernetFrame};
+use super::super::linkl::{BaseEthernetDevice, EthernetFrame, MAC_BROADCAST};
 use super::{network_protocol::*, NetworkLog};
 use super::ip::*;
 use super::arp::*;
@@ -337,8 +337,7 @@ impl IpDevice {
     }
 
     fn decode(&self, frame: &EthernetFrame) -> Res<Option<NetworkProtocol>> {
-        // FIXME: broadcast
-        if frame.dst != self.get_mac() && frame.dst != Mac::new(999) { 
+        if frame.dst != self.get_mac() && !frame.is_bloadcast() { 
             return Ok(None)
         }
         let p = match frame.ethertype {
@@ -366,7 +365,7 @@ impl IpDevice {
             NetworkProtocol::ARP(arp) => {
                 if arp.opcode == 1 {
                     // request
-                    Mac::new(999) // FIXME: broadcast
+                    MAC_BROADCAST
                 } else {
                     // response
                     arp.target_mac
@@ -429,7 +428,6 @@ impl IpDevice {
                     Ok(Some(arp))
                 }
                 2 => { // reply
-                    // FIXME: add arp table
                     self.add_arp_entry(arp.sender_ipaddr, arp.sender_mac)?;
                     Ok(None)
                 }

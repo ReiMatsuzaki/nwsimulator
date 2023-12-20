@@ -14,6 +14,8 @@ pub struct EthernetFrame {
     pub payload: Vec<u8>,
 }
 
+pub const MAC_BROADCAST: Mac = Mac { value: 0xFFFFFFFFFFFF };
+
 impl EthernetFrame {
     pub fn new(dst: Mac, src: Mac, ethertype: u16, payload: Vec<u8>) -> EthernetFrame {
         EthernetFrame {
@@ -22,6 +24,19 @@ impl EthernetFrame {
             ethertype,
             payload,
         }
+    }
+
+    // pub fn new_bloadcast(src: Mac, ethertype: u16, payload: Vec<u8>) -> EthernetFrame {
+    //     EthernetFrame {
+    //         dst: MAC_BLOADCAST,
+    //         src,
+    //         ethertype,
+    //         payload,
+    //     }
+    // }
+
+    pub fn is_bloadcast(&self) -> bool {
+        self.dst == MAC_BROADCAST
     }
 
     pub fn decode(xs: &Vec<u8>) -> Res<EthernetFrame> {
