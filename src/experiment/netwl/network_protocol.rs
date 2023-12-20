@@ -7,6 +7,15 @@ pub enum NetworkProtocol {
     ARP(ARP),
 }
 
+impl NetworkProtocol {
+    pub fn encode(&self) -> Vec<u8> {
+        match self {
+            NetworkProtocol::IP(ip) => ip.encode(),
+            NetworkProtocol::ARP(arp) => arp.encode(),
+        }
+    }
+}
+
 impl std::fmt::Display for NetworkProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {

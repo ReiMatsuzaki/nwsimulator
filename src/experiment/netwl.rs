@@ -346,7 +346,7 @@ impl Device for Router {
     }
 }
 
-pub fn run_host_host() -> Res<Network> {
+pub fn run_host_host() -> Res<()> {
     crate::output::set_level(crate::output::Level::Frame);
     let subnet_mask = SubnetMask::new(24);
     let addr0 = IpAddr::new(0x0a00_0001);
@@ -356,7 +356,8 @@ pub fn run_host_host() -> Res<Network> {
     let mac1 = Mac::new(762);
     let port0 = Port::new(0);
     let port1 = Port::new(0);
-    let mut host0 = IpHost::new_echo(mac0, "host1", addr0, subnet_mask);
+    // let mut host0 = IpHost::new_echo(mac0, "host1", addr0, subnet_mask);
+    let mut host0 = IpDevice::new_host_echo(mac0, "host1", addr0, subnet_mask);
     host0.add_schedule(0, NetworkProtocol::IP(ip0));
     host0.add_arp_entry(addr1, mac1)?;
     let host1 = IpHost::new_echo(mac1, "host2", addr1, subnet_mask);
@@ -368,12 +369,18 @@ pub fn run_host_host() -> Res<Network> {
     nw.connect_both(mac0, port0, mac1, port1).unwrap();
     nw.run(100).unwrap();
     let d = nw.get_device(mac0).unwrap();
-    let d = d.as_any().downcast_ref::<IpHost>().unwrap();
-    println!("{}", d.get_name());    
-    let log = &d.get_rlog()[0];
-    println!("received log: {:?}, {:?}", log.t, log.p);
-
-    Ok(nw)
+    let d = d.as_any().downcast_ref::<IpDevice>().unwrap();
+    // println!("{}", d.get_name());    
+    // let log = &d.get_rlog()[0];
+    // println!("received log: {:?}, {:?}", log.t, log.p);
+    println!("{:?}", d.get_rlog());
+    assert_eq!(1, d.get_rlog().len());
+    let ip = match d.get_rlog()[0].p.clone() {
+        NetworkProtocol::IP(p) => p,
+        _ => panic!("")
+    };
+    assert_eq!(d.get_ip_addr(Port::new(0)), Some(ip.dst));
+    Ok(())
 }
 
 pub fn run_2host_1router() -> Res<()> {
@@ -609,16 +616,7 @@ mod tests {
 
     #[test]
     fn test_host_host() {
-        let mut nw = run_host_host().unwrap();
-        let d = nw.get_device(Mac::new(761)).unwrap();
-        let d = d.as_any().downcast_ref::<IpHost>().unwrap();
-        println!("{:?}", d.get_rlog());
-        assert_eq!(1, d.get_rlog().len());
-        let ip = match d.get_rlog()[0].p.clone() {
-            NetworkProtocol::IP(p) => p,
-            _ => panic!("")
-        };
-        assert_eq!(d.get_ip_addr(), ip.dst);
+        run_host_host().unwrap();
     }
 
     #[test]
