@@ -104,14 +104,6 @@ pub trait EthernetDevice {
 
     fn ether_base_mut(&mut self) -> &mut BaseEthernetDevice;
 
-    // fn base(&self) -> &BaseDevice {
-    //     &self.ether_base().base
-    // }
-
-    // fn base_mut(&mut self) -> &mut BaseDevice {
-    //     &mut self.ether_base_mut().base
-    // }
-
     fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
         self.ether_base_mut().pop_rbuf(ctx)
     }
@@ -129,6 +121,6 @@ pub trait EthernetDevice {
     }
 
     fn get_slog(&self) -> &Vec<EthernetLog> {
-        &self.ether_base().rlog
+        &self.ether_base().slog
     }
 }

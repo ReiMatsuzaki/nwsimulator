@@ -21,8 +21,7 @@ pub fn run_sample() -> Res<EthernetLog> {
     let mac1 = Mac::new(24);
     let mac2 = Mac::new(25);
 
-    let mut host_a = EthernetSwitch::build_host(mac0, "host_a");
-    // let host_b = EthernetSwitch::build_host(mac1, "host_b");
+    let mut host_a = EthernetHost::build_echo(mac0, "host_a");
     let host_b = EthernetHost::build_echo(mac1, "host_b");
     let brdige = EthernetSwitch::build_bridge(mac2, "bridge");
 
@@ -40,8 +39,8 @@ pub fn run_sample() -> Res<EthernetLog> {
     let d = nw.get_device(mac1).unwrap();
     let d = d.as_any().downcast_ref::<EthernetHost>().unwrap();
     println!("{}", d.get_rlog().len());
-    println!("{:?}", d.get_slog()[0]);
-    Ok(d.get_slog()[0].clone())
+    println!("{:?}", d.get_rlog()[0]);
+    Ok(d.get_rlog()[0].clone())
 }
 
 pub fn run_sample_3host() -> Res<EthernetLog> {
@@ -53,10 +52,10 @@ pub fn run_sample_3host() -> Res<EthernetLog> {
     let mac3 = Mac::new(24);
     let mac_s = Mac::new(30);
 
-    let mut host_0 = EthernetSwitch::build_host(mac0, "host_a");
-    let host_1 = EthernetSwitch::build_echo_host(mac1, "host_b");
-    let host_2 = EthernetSwitch::build_echo_host(mac2, "host_c");
-    let host_3 = EthernetSwitch::build_host(mac3, "host_d");
+    let mut host_0 = EthernetHost::build_consumer(mac0, "host_a");
+    let host_1 = EthernetHost::build_echo(mac1, "host_b");
+    let host_2 = EthernetHost::build_echo(mac2, "host_c");
+    let host_3 = EthernetHost::build_echo(mac3, "host_d");
     let switch = EthernetSwitch::build_switch(mac_s, "switch", 4);
 
     let frame = EthernetFrame::new(mac1, mac0, 3, vec![11, 12, 13]);
@@ -70,10 +69,10 @@ pub fn run_sample_3host() -> Res<EthernetLog> {
     nw.connect_both(mac_s, Port::new(1), mac1, Port::new(0))?;
     nw.connect_both(mac_s, Port::new(2), mac2, Port::new(0))?;
     nw.connect_both(mac_s, Port::new(3), mac3, Port::new(0))?;
-    nw.run(150).unwrap();
+    nw.run(200).unwrap();
 
     let d = nw.get_device(mac0)?;
-    let d = d.as_any().downcast_ref::<EthernetSwitch>().unwrap();
+    let d = d.as_any().downcast_ref::<EthernetHost>().unwrap();
     println!("{}", d.get_rlog().len());
     let log = &d.get_rlog()[0];
     println!("t={}, frame={}", log.t, log.frame);
