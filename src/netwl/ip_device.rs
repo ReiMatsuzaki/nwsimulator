@@ -1,4 +1,4 @@
-use std::collections::{VecDeque, HashMap};
+use std::collections::HashMap;
 use super::super::physl::Device;
 
 use super::super::types::*;
@@ -11,7 +11,7 @@ use super::ip_addr::*;
 
 type BytesFn = dyn Fn(&Vec<u8>) -> Res<Vec<u8>>;
 
-pub struct IpDevice {
+pub struct BaseIpDevice {
     pub base: BaseEthernetDevice,
 
     // rbuf: VecDeque<NetworkProtocol>,
@@ -27,8 +27,8 @@ pub struct IpDevice {
     ip_handler: Box<BytesFn>,
 }
 
-impl IpDevice {
-    pub fn new(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask, ip_handler: Box<BytesFn>) -> Box<IpDevice> {
+impl BaseIpDevice {
+    pub fn new(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask, ip_handler: Box<BytesFn>) -> BaseIpDevice {
         let ip_addr_ports: Vec<(IpAddr, Port)> = ip_addr_list
             .into_iter()
             .enumerate()
@@ -38,7 +38,31 @@ impl IpDevice {
             .collect();
         // let num_ports = ip_addr_ports.len();
         let base = BaseEthernetDevice::new(mac, name, ip_addr_ports.len());
-        let device = IpDevice {
+        let device = BaseIpDevice {
+            base,
+            subnet_mask,
+            ip_addr_ports: ip_addr_ports,
+            routing_table: HashMap::new(),
+            arp_table: HashMap::new(),
+            schedules: Vec::new(),
+            slog: Vec::new(),
+            rlog: Vec::new(),
+            ip_handler,
+        };
+        device
+    }
+
+    pub fn build(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask, ip_handler: Box<BytesFn>) -> Box<BaseIpDevice> {
+        let ip_addr_ports: Vec<(IpAddr, Port)> = ip_addr_list
+            .into_iter()
+            .enumerate()
+            .map(|(i, ip_addr)| {
+                (ip_addr, Port::new(i as u32))
+            })
+            .collect();
+        // let num_ports = ip_addr_ports.len();
+        let base = BaseEthernetDevice::new(mac, name, ip_addr_ports.len());
+        let device = BaseIpDevice {
             base,
             subnet_mask,
             ip_addr_ports: ip_addr_ports,
@@ -52,18 +76,9 @@ impl IpDevice {
         Box::new(device)
     }
 
-    pub fn new_host(mac: Mac, name: &str, ip_addr: IpAddr, subnet_mask: SubnetMask, ip_handler: Box<BytesFn>) -> Box<IpDevice> {
-        IpDevice::new(mac, name, vec![ip_addr], subnet_mask, ip_handler)
-    }            
-
-    pub fn new_host_echo(mac: Mac, name: &str, ip_addr: IpAddr, subnet_mask: SubnetMask) -> Box<IpDevice> {
-        let ip_handler = Box::new(|xs: &Vec<u8>| Ok(xs.clone()) );
-        IpDevice::new_host(mac, name, ip_addr, subnet_mask, ip_handler)
-    }
-
-    pub fn new_router(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask) -> Box<IpDevice> {
+    pub fn new_router(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask) -> Box<BaseIpDevice> {
         let ip_handler = Box::new(|_: &Vec<u8>| Ok("i am router".bytes().collect()));
-        IpDevice::new(mac, name, ip_addr_list, subnet_mask, ip_handler)
+        BaseIpDevice::build(mac, name, ip_addr_list, subnet_mask, ip_handler)
     }
 
     fn pop_frame(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
@@ -292,9 +307,67 @@ impl IpDevice {
         let ip = IP::new_icmp(src, dst, 3, 1);
         NetworkProtocol::IP(ip)
     }
+
+    fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
+        if let Some(frame) = self.pop_frame(ctx) {
+            if let Some(p) = self.decode(&frame)? {        
+                self.add_rlog(&p, ctx);
+                return Ok(Some(p))
+            }
+        }
+        Ok(None)
+    }
+
+    fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext)  -> Res<()> {
+        match self.encode(&p) {
+            Ok(frame) => {
+                self.add_slog(&p, ctx);
+                self.push_frame(frame, ctx);
+                Ok(())
+            },
+            Err(Error::MacNotFailed) => {
+                let ip = self.unreachable(p);
+                self.push_sbuf(ip, ctx)
+            },
+            Err(e) => return Err(e)
+        }
+    }
+
+    fn update_from_schedule(&mut self, ctx: &UpdateContext) -> Res<()> {
+        for idx in 0..self.schedules.len() {
+            let s = &self.schedules[idx];
+            if s.t == ctx.t {
+                let p = s.p.clone();
+                self.push_sbuf(p, ctx)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn base_update(&mut self, ctx: &UpdateContext) -> Res<()> {
+        // FIXME: move schedule to IpHost
+        for idx in 0..self.schedules.len() {
+            let s = &self.schedules[idx];
+            if s.t == ctx.t {
+                let p = s.p.clone();
+                self.push_sbuf(p, ctx)?;
+            }
+        }
+
+        while let Some(p) = self.pop_rbuf(ctx)? {
+            if let Some(p) = self.handle(&p)? {
+                // sbuf.push_back(p);
+                self.push_sbuf(p, ctx)?;
+            }
+        }
+
+        self.update_table()?;
+
+        Ok(())
+    }
 }
 
-impl Device for IpDevice {
+impl Device for BaseIpDevice {
     fn base(&self) -> &super::super::physl::BaseDevice {
         &self.base.base
     }
@@ -308,45 +381,60 @@ impl Device for IpDevice {
     }
 
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        // FIXME: rbuf should be member field?
-        let mut rbuf = VecDeque::new();
-        let mut sbuf = VecDeque::new();
+        self.base_update(ctx)
+    }
+}
 
-        for s in &self.schedules {
-            if s.t == ctx.t {
-                sbuf.push_back(s.p.clone());
-            }
-        }
+pub trait IpDevice {
+    fn ip_base(&self) -> &BaseIpDevice;
 
-        while let Some(frame) = self.pop_frame(ctx) {
-            if let Some(p) = self.decode(&frame)? {
-                self.add_rlog(&p, ctx);
-                rbuf.push_back(p);
-            }
-        }
+    fn ip_base_mut(&mut self) -> &mut BaseIpDevice;
 
-        while let Some(p) = rbuf.pop_front() {
-            if let Some(p) = self.handle(&p)? {
-                sbuf.push_back(p);
-            }
-        }
+    fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext) -> Res<()> {
+        self.ip_base_mut().push_sbuf(p, ctx)
+    }
 
-        while let Some(p) = sbuf.pop_front() {
-            let frame = match self.encode(&p) {
-                Ok(frame) => frame,
-                Err(Error::MacNotFailed) => {
-                    let ip = self.unreachable(p);
-                    sbuf.push_back(ip);
-                    continue;
-                },
-                Err(e) => return Err(e)
-            };
-            self.add_slog(&p, ctx);
-            self.push_frame(frame, ctx);
-        }
+    fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
+        self.ip_base_mut().pop_rbuf(ctx)
+    }
 
-        self.update_table()?;
+    fn update_table(&mut self) -> Res<()> {
+        self.ip_base_mut().update_table()
+    }
 
-        Ok(())
+    fn base_handle_ip(&self, ip: &IP) -> Res<Option<NetworkProtocol>> {
+        self.ip_base().handle_ip(ip)
+    }
+
+    fn base_handle_arp(&mut self, arp: &ARP) -> Res<Option<NetworkProtocol>> {
+        self.ip_base_mut().handle_arp(arp)
+    }
+
+    fn add_arp_entry(&mut self, ip_addr: IpAddr, mac: Mac) -> Res<()> {
+        self.ip_base_mut().add_arp_entry(ip_addr, mac)
+    }
+
+    fn add_route_entry(&mut self, nw_part: NetworkPart, ip_addr: IpAddr) -> Res<()> {
+        self.ip_base_mut().add_route_entry(nw_part, ip_addr)
+    }
+
+    fn add_schedule(&mut self, t: usize, p: NetworkProtocol) {
+        self.ip_base_mut().add_schedule(t, p)
+    }
+
+    fn get_ip_addr(&self, port: Port) -> Option<IpAddr> {
+        self.ip_base().get_ip_addr(port)
+    }
+
+    fn get_arp_table(&self) -> &HashMap<IpAddr, Mac> {
+        self.ip_base().get_arp_table()
+    }
+
+    fn get_rlog(&self) -> &Vec<NetworkLog> {
+        self.ip_base().get_rlog()
+    }
+
+    fn update_from_schedule(&mut self, ctx: &UpdateContext) -> Res<()> {
+        self.ip_base_mut().update_from_schedule(ctx)
     }
 }

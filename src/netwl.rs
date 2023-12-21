@@ -3,6 +3,7 @@ pub mod ip;
 pub mod arp;
 pub mod network_protocol;
 pub mod ip_device;
+pub mod ip_host;
 
 use super::linkl::EthernetSwitch;
 
@@ -14,6 +15,7 @@ use ip::*;
 use arp::*;
 use network_protocol::*;
 use ip_device::*;
+use ip_host::*;
 
 #[derive(Debug)]
 pub struct NetworkLog {
@@ -31,8 +33,8 @@ pub fn run_host_host() -> Res<()> {
     let mac1 = Mac::new(762);
     let port0 = Port::new(0);
     let port1 = Port::new(0);
-    let mut host0 = IpDevice::new_host_echo(mac0, "host1", addr0, subnet_mask);
-    let mut host1 = IpDevice::new_host_echo(mac1, "host2", addr1, subnet_mask);
+    let mut host0 = IpHost::build_echo(mac0, "host1", addr0, subnet_mask);
+    let mut host1 = IpHost::build_echo(mac1, "host2", addr1, subnet_mask);
     host0.add_schedule(0, NetworkProtocol::IP(ip0));
     host0.add_arp_entry(addr1, mac1)?;
     host1.add_arp_entry(addr0, mac0)?;
@@ -44,7 +46,7 @@ pub fn run_host_host() -> Res<()> {
     nw.connect_both(mac0, port0, mac1, port1).unwrap();
     nw.run(100).unwrap();
     let d = nw.get_device(mac0).unwrap();
-    let d = d.as_any().downcast_ref::<IpDevice>().unwrap();
+    let d = d.as_any().downcast_ref::<IpHost>().unwrap();
     // println!("{}", d.get_name());    
     // let log = &d.get_rlog()[0];
     // println!("received log: {:?}, {:?}", log.t, log.p);
@@ -70,16 +72,16 @@ pub fn run_2host_1router() -> Res<()> {
     let mac_s = Mac::new(763);
     let mac_r = Mac::new(764);
 
-    let mut host_a = IpDevice::new_host_echo(mac_a, "hostA", addr_a, subnet_mask);
+    let mut host_a = IpHost::build_echo(mac_a, "hostA", addr_a, subnet_mask);
     let ip0 = IP::new_byte(addr_a, addr_b, vec![0x01, 0x02]);
     host_a.add_schedule(0, NetworkProtocol::IP(ip0));
     host_a.add_arp_entry(addr_b, mac_b)?;
 
-    let mut host_b = IpDevice::new_host_echo(mac_b, "hostB", addr_b, subnet_mask);
+    let mut host_b = IpHost::build_echo(mac_b, "hostB", addr_b, subnet_mask);
     host_b.add_arp_entry(addr_a, mac_a)?;
 
     let switch = EthernetSwitch::build_switch(mac_s, "switch", 3);
-    let router = IpDevice::new_router(mac_r, "router", vec![addr_r], subnet_mask);
+    let router = BaseIpDevice::new_router(mac_r, "router", vec![addr_r], subnet_mask);
 
     let mut nw = Network::new(
         vec![host_a, host_b, switch, router],
@@ -91,11 +93,13 @@ pub fn run_2host_1router() -> Res<()> {
 
     nw.run(200).unwrap();
     let d = nw.get_device(mac_a).unwrap();
-    let d = d.as_any().downcast_ref::<IpDevice>().unwrap();
+    let d = d.as_any().downcast_ref::<IpHost>().unwrap();
 
     println!("{:?}", d.get_rlog());
     assert_eq!(1, d.get_rlog().len());
-    let ip = match d.get_rlog()[0].p.clone() {
+    let log = &d.get_rlog()[0];
+    println!("t={}, p={}", log.t, log.p);
+    let ip = match log.p.clone() {
         NetworkProtocol::IP(p) => p,
         _ => panic!("")
     };
@@ -127,12 +131,12 @@ pub fn run_2router() -> Res<()> {
     let mac_1 = Mac::new(767);
     let mac_3 = Mac::new(768);
 
-    let mut host_a = IpDevice::new_host_echo(mac_a, "host1a", addr_1a, subnet_mask);
-    let host_b = IpDevice::new_host_echo(mac_b, "host1b", addr_1b, subnet_mask);
-    let host_c = IpDevice::new_host_echo(mac_c, "host3c", addr_3c, subnet_mask);
-    let mut host_d = IpDevice::new_host_echo(mac_d, "host3d", addr_3d, subnet_mask);
-    let mut router_r = IpDevice::new_router(mac_r, "routeR", vec![addr_1r, addr_2r], subnet_mask);
-    let mut router_s = IpDevice::new_router(mac_s, "routeS", vec![addr_3s, addr_2s], subnet_mask);
+    let mut host_a = IpHost::build_echo(mac_a, "host1a", addr_1a, subnet_mask);
+    let host_b = IpHost::build_echo(mac_b, "host1b", addr_1b, subnet_mask);
+    let host_c = IpHost::build_echo(mac_c, "host3c", addr_3c, subnet_mask);
+    let mut host_d = IpHost::build_echo(mac_d, "host3d", addr_3d, subnet_mask);
+    let mut router_r = BaseIpDevice::new_router(mac_r, "routeR", vec![addr_1r, addr_2r], subnet_mask);
+    let mut router_s = BaseIpDevice::new_router(mac_s, "routeS", vec![addr_3s, addr_2s], subnet_mask);
     let switch_1 = EthernetSwitch::build_switch(mac_1, "switch1", 3);
     let switch_3 = EthernetSwitch::build_switch(mac_3, "switch3", 3);
 
@@ -169,7 +173,7 @@ pub fn run_2router() -> Res<()> {
 
     nw.run(550).unwrap();
     let d = nw.get_device(mac_a)?;
-    let d = d.as_any().downcast_ref::<IpDevice>().unwrap();
+    let d = d.as_any().downcast_ref::<IpHost>().unwrap();
     let rlogs = d.get_rlog();
     assert_eq!(1, rlogs.len());
     let plog: &IP = match rlogs[0].p {
@@ -204,12 +208,12 @@ pub fn run_unreachable() -> Res<()> {
     let mac_1 = Mac::new(767);
     let mac_3 = Mac::new(768);
 
-    let mut host_a = IpDevice::new_host_echo(mac_a, "host1a", addr_1a, subnet_mask);
-    let host_b = IpDevice::new_host_echo(mac_b, "host1b", addr_1b, subnet_mask);
-    let host_c = IpDevice::new_host_echo(mac_c, "host3c", addr_3c, subnet_mask);
-    let mut host_d = IpDevice::new_host_echo(mac_d, "host3d", addr_3d, subnet_mask);
-    let mut router_r = IpDevice::new_router(mac_r, "routeR", vec![addr_1r, addr_2r], subnet_mask);
-    let mut router_s = IpDevice::new_router(mac_s, "routeS", vec![addr_3s, addr_2s], subnet_mask);
+    let mut host_a = IpHost::build_echo(mac_a, "host1a", addr_1a, subnet_mask);
+    let host_b = IpHost::build_echo(mac_b, "host1b", addr_1b, subnet_mask);
+    let host_c = IpHost::build_echo(mac_c, "host3c", addr_3c, subnet_mask);
+    let mut host_d = IpHost::build_echo(mac_d, "host3d", addr_3d, subnet_mask);
+    let mut router_r = BaseIpDevice::new_router(mac_r, "routeR", vec![addr_1r, addr_2r], subnet_mask);
+    let mut router_s = BaseIpDevice::new_router(mac_s, "routeS", vec![addr_3s, addr_2s], subnet_mask);
     let switch_1 = EthernetSwitch::build_switch(mac_1, "switch1", 3);
     let switch_3 = EthernetSwitch::build_switch(mac_3, "switch3", 3);
 
@@ -264,15 +268,15 @@ pub fn run_test_router_arp() -> Res<()> {
     let mac_s = Mac::new(763);
     let mac_r = Mac::new(764);
 
-    let mut host_a = IpDevice::new_host_echo(mac_a, "hostA", addr_a, subnet_mask);
+    let mut host_a = IpHost::build_echo(mac_a, "hostA", addr_a, subnet_mask);
     let arp0 = ARP::new_request(mac_a, addr_a, addr_r);
         // host_a.get_mac(), host_a.get_ip_addr(Port::new(0)).unwrap(), addr_r);
     host_a.add_schedule(0, NetworkProtocol::ARP(arp0));
     // host_a.add_arp_entry(addr_b, mac_b)?;
 
-    let host_b = IpDevice::new_host_echo(mac_b, "hostB", addr_b, subnet_mask);
+    let host_b = IpHost::build_echo(mac_b, "hostB", addr_b, subnet_mask);
     let switch = EthernetSwitch::build_switch(mac_s, "switch", 3);
-    let router = IpDevice::new_router(mac_r, "router", vec![addr_r], subnet_mask);
+    let router = BaseIpDevice::new_router(mac_r, "router", vec![addr_r], subnet_mask);
 
     let mut nw = Network::new(
         vec![host_a, host_b, switch, router],
@@ -285,7 +289,7 @@ pub fn run_test_router_arp() -> Res<()> {
     nw.run(250).unwrap();
 
     let d = nw.get_device(mac_a).unwrap();
-    let d = d.as_any().downcast_ref::<IpDevice>().unwrap();
+    let d = d.as_any().downcast_ref::<IpHost>().unwrap();
     let arp_table = d.get_arp_table();
     assert_eq!(1, arp_table.len());
     let (ipaddr, mac ) = arp_table.iter().next().unwrap();
