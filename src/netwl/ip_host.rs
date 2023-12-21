@@ -35,7 +35,7 @@ impl IpHost {
             let s = &self.schedules[idx];
             if s.t == ctx.t {
                 let p = s.p.clone();
-                self.push_sbuf(p, ctx)?;
+                self.send(p, ctx)?;
             }
         }
         Ok(())

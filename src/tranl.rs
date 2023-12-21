@@ -10,7 +10,7 @@ use crate::{netwl::{IpAddr, SubnetMask}, physl::Network};
 
 use super::types::*;
 
-pub fn run_test_tcp() -> Res<()> {
+pub fn run_test_tcp_nw() -> Res<()> {
     let mac0 = Mac::new(721);
     let mac1 = Mac::new(722);
     let ip0 = IpAddr::new(7621);
@@ -42,7 +42,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tcp() {
-        run_test_tcp().unwrap();
+    fn test_tcp_nw() {
+        run_test_tcp_nw().unwrap();
     }
 }

@@ -67,16 +67,16 @@ impl Device for EthernetHost {
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
         if let Some(schedule) = self.schedules.front() {
             if schedule.t == ctx.t {
-                self.base.push_sbuf(schedule.frame.clone(), ctx);
+                self.base.send(schedule.frame.clone(), ctx);
                 self.schedules.pop_front();
             }
         }
 
-        if let Some(frame) = self.pop_rbuf(ctx) {
+        if let Some(frame) = self.recv(ctx) {
             if frame.dst == self.get_mac() {
                 if let Some(bytes) = (self.handler)(&frame.payload)? {
                     let frame = EthernetFrame::new(frame.src, frame.dst, frame.ethertype, bytes);
-                    self.push_sbuf(frame, ctx);
+                    self.send(frame, ctx);
                 }
             }
         }

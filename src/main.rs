@@ -39,7 +39,7 @@ fn main() -> io::Result<()> {
         33 => { netwl::run_unreachable().unwrap(); }
         34 => { netwl::run_test_router_arp().unwrap(); }
 
-        40 => { tranl::run_test_tcp().unwrap(); }
+        40 => { tranl::run_test_tcp_nw().unwrap(); }
         _ => println!("No such run number"),
     }
 

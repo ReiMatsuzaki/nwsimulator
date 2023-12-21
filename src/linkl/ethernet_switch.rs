@@ -40,8 +40,8 @@ impl Device for EthernetSwitch {
 
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
         // rbuf -> sbuf
-        while let Some(frame) = self.base.pop_rbuf(ctx) {
-            self.base.push_sbuf(frame, ctx);
+        while let Some(frame) = self.base.recv(ctx) {
+            self.base.send(frame, ctx);
         }
         Ok(())
     }

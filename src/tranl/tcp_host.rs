@@ -35,8 +35,7 @@ impl TcpHost {
         self.ip_base.get_ip_addr(Port::new(0)).unwrap()
     }
 
-    // FIXME: rename
-    fn handle_insts(&mut self, _ctx: &UpdateContext) -> Option<(IpAddr, TCP)> {
+    fn consume_inst(&mut self, _ctx: &UpdateContext) -> Option<TCP> {
         let inst = self.insts.front()?.clone();
         match &mut self.socket {
             None => match inst {
@@ -45,7 +44,7 @@ impl TcpHost {
                     self.socket = Some(s);
                     let tcp = TCP::new_syn(TPort::new(0),  port, 0);
                     self.insts.pop_front();
-                    Some((ip_addr.clone(), tcp))
+                    Some(tcp)
                 },
                 Inst::Listen(_sid, _port) => {
                     let s = Socket::new(State::Listening, TPort::new(0), IpAddr::new(0));
@@ -62,7 +61,7 @@ impl TcpHost {
                         let payload = msg.as_bytes().to_vec();
                         let tcp = TCP::new_data(TPort::new(0), s.dst_port, 0, 0, 0, payload);
                         self.insts.pop_front();
-                        Some((s.dst_ip, tcp))
+                        Some(tcp)
                     }
                     Inst::Recv(_sid)  => {
                         s.set_state(State::DataReceiving);
@@ -73,7 +72,7 @@ impl TcpHost {
                         s.set_state(State::FinSent);
                         let tcp = TCP::new_fin(TPort::new(0), s.dst_port, 0, 0);
                         self.insts.pop_front();
-                        Some((s.dst_ip, tcp))
+                        Some(tcp)
                     }
                     _ => None
                 }
@@ -82,7 +81,7 @@ impl TcpHost {
         }
    }
 
-    pub fn handle_tcp(&mut self, tcp: &TCP, _ctx: &UpdateContext) -> Res<Option<TCP>> {
+    fn transform_tcp(&mut self, tcp: &TCP, _ctx: &UpdateContext) -> Res<Option<TCP>> {
         let cnt = &tcp.content;
         match &mut self.socket {
             None => Err(Error::InvalidTcpReceived { msg: "state is NoConnection".to_string() }),
@@ -165,7 +164,7 @@ impl TcpHost {
     }
 
     fn recv_ip(&mut self, ctx: &UpdateContext) -> Res<Option<IP>> {
-        let x = self.ip_base.pop_rbuf(ctx)?
+        let x = self.ip_base.recv(ctx)?
         .and_then(|p|
             match p {
                 crate::netwl::NetworkProtocol::IP(ip) => Some(ip),
@@ -176,8 +175,29 @@ impl TcpHost {
     }
 
     fn send_ip(&mut self, ip: IP, ctx: &UpdateContext) -> Res<()> {
-        self.ip_base.push_sbuf(crate::netwl::NetworkProtocol::IP(ip), ctx)?;
+        self.ip_base.send(crate::netwl::NetworkProtocol::IP(ip), ctx)?;
         Ok(())
+    }
+
+    fn recv(&mut self, ctx: &UpdateContext) -> Res<Option<TCP>> {
+        if let Some(ip) = self.recv_ip(ctx)? {
+            let tcp = TCP::decode(&ip.payload_as_bytes())?;
+            Ok(Some(tcp))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn send(&mut self, tcp: TCP, ctx: &UpdateContext) -> Res<()> {
+        let payload = tcp.encode();
+        if let Some(socket) = &self.socket {
+            let dst = socket.dst_ip;
+            let ip = IP::new_byte(self.get_ip_addr(), dst, payload);
+            self.send_ip(ip, ctx)?;
+            Ok(())
+        } else {
+            return Err(Error::InvalidTcpReceived { msg: "socket is None".to_string() });
+        }
     }
 }
 
@@ -195,18 +215,13 @@ impl Device for TcpHost {
     }
 
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        if let Some((ip_addr, tcp)) = self.handle_insts(&ctx) {
-            let payload = tcp.encode();
-            let ip = IP::new_byte(self.get_ip_addr(), ip_addr, payload);
-            self.send_ip(ip, ctx)?;
+        if let Some(tcp) = self.consume_inst(&ctx) {
+            self.send(tcp, ctx)?;
         }
 
-        while let Some(ip) = self.recv_ip(ctx)? {
-            let tcp = TCP::decode(&ip.payload_as_bytes())?;
-            if let Some(tcp) = self.handle_tcp(&tcp, ctx)? {
-                let payload = tcp.encode();
-                let ip = IP::new_byte(ip.dst, ip.src, payload);
-                self.send_ip(ip, ctx)?;
+        while let Some(tcp) = self.recv(ctx)? {
+            if let Some(tcp) = self.transform_tcp(&tcp, ctx)? {
+                self.send(tcp, ctx)?;
             }
         }
         Ok(())

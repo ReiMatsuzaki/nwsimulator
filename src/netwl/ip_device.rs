@@ -45,12 +45,12 @@ impl BaseIpDevice {
         device
     }
 
-    fn pop_frame(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
-        self.base.pop_rbuf(ctx)
+    fn recv_frame(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
+        self.base.recv(ctx)
     }
 
-    fn push_frame(&mut self, frame: EthernetFrame, ctx: &UpdateContext) {
-        self.base.push_sbuf(frame, ctx);
+    fn send_frame(&mut self, frame: EthernetFrame, ctx: &UpdateContext) {
+        self.base.send(frame, ctx);
     }
 
     fn find_next_mac(&self, ip_addr: IpAddr) -> Res<Mac> {
@@ -231,8 +231,8 @@ impl BaseIpDevice {
         NetworkProtocol::IP(ip)
     }
 
-    pub fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
-        if let Some(frame) = self.pop_frame(ctx) {
+    pub fn recv(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
+        if let Some(frame) = self.recv_frame(ctx) {
             if let Some(p) = self.decode(&frame)? {        
                 self.add_rlog(&p, ctx);
                 return Ok(Some(p))
@@ -241,16 +241,16 @@ impl BaseIpDevice {
         Ok(None)
     }
 
-    pub fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext)  -> Res<()> {
+    pub fn send(&mut self, p: NetworkProtocol, ctx: &UpdateContext)  -> Res<()> {
         match self.encode(&p) {
             Ok(frame) => {
                 self.add_slog(&p, ctx);
-                self.push_frame(frame, ctx);
+                self.send_frame(frame, ctx);
                 Ok(())
             },
             Err(Error::MacNotFailed) => {
                 let ip = self.unreachable(p);
-                self.push_sbuf(ip, ctx)
+                self.send(ip, ctx)
             },
             Err(e) => return Err(e)
         }
@@ -280,12 +280,12 @@ pub trait IpDevice {
 
     fn ip_base_mut(&mut self) -> &mut BaseIpDevice;
 
-    fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext) -> Res<()> {
-        self.ip_base_mut().push_sbuf(p, ctx)
+    fn send(&mut self, p: NetworkProtocol, ctx: &UpdateContext) -> Res<()> {
+        self.ip_base_mut().send(p, ctx)
     }
 
-    fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
-        self.ip_base_mut().pop_rbuf(ctx)
+    fn recv(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
+        self.ip_base_mut().recv(ctx)
     }
 
     fn base_handle_arp(&mut self, arp: &ARP) -> Res<Option<NetworkProtocol>> {
@@ -356,9 +356,9 @@ pub trait IpDevice {
     fn handle_ip_reply(&mut self, bytes: &Vec<u8>, ctx: &UpdateContext) -> Res<Option<Vec<u8>>>;
 
     fn base_update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        while let Some(p) = self.pop_rbuf(ctx)? {
+        while let Some(p) = self.recv(ctx)? {
             if let Some(p) = self.handle(&p, ctx)? {
-                self.push_sbuf(p, ctx)?;
+                self.send(p, ctx)?;
             }
         }
         self.ip_base_mut().update_table()?;

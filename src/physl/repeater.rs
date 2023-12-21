@@ -28,8 +28,8 @@ impl Device for Repeater {
     }
 
     fn update(&mut self, _ctx: &UpdateContext) -> Res<()> {
-        while let Some((p, x)) = self.base.pop_rbuf() {
-            self.base.push_sbuf((Port::new(1 - p.value), x));
+        while let Some((p, x)) = self.base.recv() {
+            self.base.send((Port::new(1 - p.value), x));
         }
         Ok(())
     }

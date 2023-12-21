@@ -97,7 +97,7 @@ impl Network {
         }
         for idx in 0..self.devices.len() {
             let d = &mut self.devices[idx];
-            if let Some((src_port, x)) = d.pop_sbuf() {
+            if let Some((src_port, x)) = d.pop_send() {
                 let src_mac = d.get_mac();
                 let (dst_mac, dst_port) = self.find_connection(src_mac, src_port)?;
                 if disp {
@@ -106,7 +106,7 @@ impl Network {
                         src_mac.value, src_port.value, dst_mac.value, dst_port.value, x
                     );
                 }
-                self.get_device(dst_mac)?.push_rbuf(dst_port, x);
+                self.get_device(dst_mac)?.push_recv(dst_port, x);
             }
         }
         for d in &mut self.devices {

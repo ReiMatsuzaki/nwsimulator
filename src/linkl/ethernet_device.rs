@@ -5,8 +5,8 @@ use crate::{types::{Mac, Port, Error, UpdateContext}, physl::BaseDevice};
 use super::{EthernetFrame, EthernetLog};
 
 pub struct BaseEthernetDevice {
-    pub rbuf: VecDeque<EthernetFrame>,
-    pub sbuf: VecDeque<EthernetFrame>,
+    pub recv_buf: VecDeque<EthernetFrame>,
+    pub send_buf: VecDeque<EthernetFrame>,
     forward_table: HashMap<Mac, Port>,
     bufs: HashMap<Port, Vec<u8>>,
     pub base: BaseDevice,
@@ -18,8 +18,8 @@ pub struct BaseEthernetDevice {
 impl BaseEthernetDevice {
     pub fn new(mac: Mac, name: &str, num_ports: usize) -> BaseEthernetDevice {
         BaseEthernetDevice {
-            rbuf: VecDeque::new(),
-            sbuf: VecDeque::new(), // FIXME: sbuf isn't used
+            recv_buf: VecDeque::new(),
+            send_buf: VecDeque::new(), // FIXME: sbuf isn't used
             forward_table: HashMap::new(),
             bufs: HashMap::new(),
             base: BaseDevice::new(mac, name, num_ports),
@@ -28,10 +28,10 @@ impl BaseEthernetDevice {
         }
     }
 
-    pub fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
+    pub fn recv(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
         let disp = crate::output::is_frame_level();
 
-        while let Some((port, x)) = self.base.pop_rbuf() {
+        while let Some((port, x)) = self.base.recv() {
             if let Some(xs) = self.bufs.get_mut(&port) {
                 xs.push(x);
             } else {
@@ -48,7 +48,7 @@ impl BaseEthernetDevice {
                         self.rlog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
     
                         self.forward_table.insert(frame.src, port);
-                        self.rbuf.push_back(frame);
+                        self.recv_buf.push_back(frame);
                         xs.clear();
                     },
                     Err(Error::NotEnoughBytes) => {}, // do nothing
@@ -60,10 +60,10 @@ impl BaseEthernetDevice {
             }
         }
 
-        self.rbuf.pop_front()
+        self.recv_buf.pop_front()
     }
 
-    pub fn push_sbuf(&mut self, frame: EthernetFrame, ctx: &UpdateContext) {
+    pub fn send(&mut self, frame: EthernetFrame, ctx: &UpdateContext) {
         let disp = crate::output::is_frame_level();
         self.slog.push(EthernetLog { t: ctx.t, frame: frame.clone() });
         if disp {
@@ -89,7 +89,7 @@ impl BaseEthernetDevice {
         let bytes = EthernetFrame::encode(&frame);
         for port in ports {
             for byte in &bytes {
-                self.base.push_sbuf((port, *byte));
+                self.base.send((port, *byte));
             }
         }
     }
@@ -104,12 +104,12 @@ pub trait EthernetDevice {
 
     fn ether_base_mut(&mut self) -> &mut BaseEthernetDevice;
 
-    fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
-        self.ether_base_mut().pop_rbuf(ctx)
+    fn recv(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
+        self.ether_base_mut().recv(ctx)
     }
 
-    fn push_sbuf(&mut self, frame: EthernetFrame, ctx: &UpdateContext) {
-        self.ether_base_mut().push_sbuf(frame, ctx)
+    fn send(&mut self, frame: EthernetFrame, ctx: &UpdateContext) {
+        self.ether_base_mut().send(frame, ctx)
     }
 
     fn add_forwarding_table(&mut self, dst: Mac, port: Port) {

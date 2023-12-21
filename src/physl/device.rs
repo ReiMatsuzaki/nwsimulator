@@ -18,12 +18,12 @@ pub trait Device {
         self.base().num_ports
     }
 
-    fn push_rbuf(&mut self, port: Port, x: u8) {
-        self.base_mut().rbuf.push_back((port, x));
+    fn push_recv(&mut self, port: Port, x: u8) {
+        self.base_mut().recv_buf.push_back((port, x));
     }
 
-    fn pop_sbuf(&mut self) -> Option<(Port, u8)> {
-        self.base_mut().sbuf.pop_front()
+    fn pop_send(&mut self) -> Option<(Port, u8)> {
+        self.base_mut().send_buf.pop_front()
     }
 
     fn as_any(&self) -> &dyn Any;
@@ -35,8 +35,8 @@ pub struct BaseDevice {
     mac: Mac,
     name: String,
     num_ports: usize,
-    rbuf: VecDeque<(Port, u8)>,
-    sbuf: VecDeque<(Port, u8)>,
+    recv_buf: VecDeque<(Port, u8)>,
+    send_buf: VecDeque<(Port, u8)>,
 }
 
 impl BaseDevice {
@@ -45,8 +45,8 @@ impl BaseDevice {
             mac,
             name: name.to_string(),
             num_ports,
-            rbuf: VecDeque::new(),
-            sbuf: VecDeque::new(),
+            recv_buf: VecDeque::new(),
+            send_buf: VecDeque::new(),
         }
     }
 
@@ -62,12 +62,12 @@ impl BaseDevice {
         self.num_ports
     }
 
-    pub fn pop_rbuf(&mut self) -> Option<(Port, u8)> {
-        self.rbuf.pop_front()
+    pub fn recv(&mut self) -> Option<(Port, u8)> {
+        self.recv_buf.pop_front()
     }
 
-    pub fn push_sbuf(&mut self, x: (Port, u8)) {
-        self.sbuf.push_back(x)
+    pub fn send(&mut self, x: (Port, u8)) {
+        self.send_buf.push_back(x)
     }
 }
 

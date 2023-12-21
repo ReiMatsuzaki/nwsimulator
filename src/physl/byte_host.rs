@@ -36,12 +36,12 @@ impl Device for ByteHost {
     }
 
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        while let Some((port, x)) = self.base.pop_rbuf() {
+        while let Some((port, x)) = self.base.recv() {
             self.rlogs.push(ByteLog { t: ctx.t, port, x });
         }
         for ByteLog { t, port, x } in &self.schedules {
             if *t == ctx.t {
-                self.base.push_sbuf((*port, *x));
+                self.base.send((*port, *x));
             }
         }
         Ok(())
