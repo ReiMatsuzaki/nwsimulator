@@ -231,7 +231,7 @@ impl BaseIpDevice {
         NetworkProtocol::IP(ip)
     }
 
-    fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
+    pub fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
         if let Some(frame) = self.pop_frame(ctx) {
             if let Some(p) = self.decode(&frame)? {        
                 self.add_rlog(&p, ctx);
@@ -241,7 +241,7 @@ impl BaseIpDevice {
         Ok(None)
     }
 
-    fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext)  -> Res<()> {
+    pub fn push_sbuf(&mut self, p: NetworkProtocol, ctx: &UpdateContext)  -> Res<()> {
         match self.encode(&p) {
             Ok(frame) => {
                 self.add_slog(&p, ctx);

@@ -23,6 +23,15 @@ impl Port {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TPort { pub value: u16 }
+
+impl TPort {
+    pub fn new(value: u16) -> TPort {
+        TPort { value }
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     NotEnoughBytes,
@@ -36,6 +45,7 @@ pub enum Error {
     // NotifyError(IP),
     MacNotFailed,
     IpUnreashcable { code: u8, msg: String },
+    InvalidTcpReceived { msg: String },
 }
 
 impl fmt::Display for Error {
@@ -62,7 +72,9 @@ impl fmt::Display for Error {
             Error::MacNotFailed => 
                 write!(f, "Mac not failed"),
             Error::IpUnreashcable { code, msg } => 
-                write!(f, "IP unreachable error. code={}, msg={}", code, msg )
+                write!(f, "IP unreachable error. code={}, msg={}", code, msg ),
+            Error::InvalidTcpReceived { msg } =>
+                write!(f, "Invalid TCP received. {}", msg),
         }
     }
 }

@@ -4,6 +4,7 @@ mod types;
 mod physl;
 mod linkl;
 mod netwl;
+mod tranl;
 
 use std::io;
 use clap::Parser;
@@ -37,6 +38,8 @@ fn main() -> io::Result<()> {
         32 => { netwl::run_2router().unwrap(); }
         33 => { netwl::run_unreachable().unwrap(); }
         34 => { netwl::run_test_router_arp().unwrap(); }
+
+        40 => { tranl::run_test_tcp().unwrap(); }
         _ => println!("No such run number"),
     }
 

@@ -11,13 +11,13 @@ use super::linkl::EthernetSwitch;
 use super::types::{Port, Mac, Res};
 use super::physl::Network;
 
-use ip_addr::*;
-use ip::*;
-use arp::*;
-use network_protocol::*;
-use ip_device::*;
-use ip_host::*;
-use router::*;
+pub use ip_addr::*;
+pub use ip::*;
+pub use arp::*;
+pub use network_protocol::*;
+pub use ip_device::*;
+pub use ip_host::*;
+pub use router::*;
 
 #[derive(Debug)]
 pub struct NetworkLog {

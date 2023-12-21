@@ -125,6 +125,13 @@ impl IP {
         }
         xs
     }
+
+    pub fn payload_as_bytes(&self) -> Vec<u8> {
+        match &self.payload {
+            IpPayload::Bytes(xs) => xs.clone(),
+            IpPayload::ICMP { ty, code } => vec![ty.clone(), code.clone()],
+        }
+    }
 }
 
 impl std::fmt::Display for IP {
