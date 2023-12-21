@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use super::super::physl::Device;
 
 use super::super::types::*;
-use super::super::physl::UpdateContext;
 use super::super::linkl::{BaseEthernetDevice, EthernetFrame, MAC_BROADCAST};
 use super::{network_protocol::*, NetworkLog};
 use super::ip::*;

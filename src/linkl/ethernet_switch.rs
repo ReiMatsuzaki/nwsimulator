@@ -1,5 +1,5 @@
-use crate::types::{Mac, Res};
-use crate::physl::{BaseDevice, Device, UpdateContext};
+use crate::types::{Mac, Res, UpdateContext};
+use crate::physl::{BaseDevice, Device};
 
 use super::BaseEthernetDevice;
 

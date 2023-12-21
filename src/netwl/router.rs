@@ -1,4 +1,4 @@
-use crate::{physl::{BaseDevice, Device, UpdateContext}, types::{Res, Mac}};
+use crate::{physl::{BaseDevice, Device}, types::{Res, Mac, UpdateContext}};
 
 use super::{ip_device::{BaseIpDevice, IpDevice}, network_protocol::NetworkProtocol, ip_addr::{IpAddr, SubnetMask}};
 

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::{types::{Res, Mac}, physl::{Device, BaseDevice, UpdateContext}};
+use crate::{types::{Res, Mac, UpdateContext}, physl::{Device, BaseDevice}};
 
 use super::{BaseEthernetDevice, EthernetDevice, EthernetFrame, EthernetLog};
 pub struct EthernetHost {

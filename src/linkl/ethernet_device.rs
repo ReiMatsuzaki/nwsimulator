@@ -1,6 +1,6 @@
 use std::collections::{VecDeque, HashMap};
 
-use crate::{types::{Mac, Port, Error}, physl::{BaseDevice, UpdateContext}};
+use crate::{types::{Mac, Port, Error, UpdateContext}, physl::BaseDevice};
 
 use super::{EthernetFrame, EthernetLog};
 
