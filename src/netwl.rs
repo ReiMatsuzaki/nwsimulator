@@ -4,7 +4,7 @@ pub mod arp;
 pub mod network_protocol;
 pub mod ip_device;
 
-use super::linkl::EthernetDevice;
+use super::linkl::EthernetSwitch;
 
 use super::types::{Port, Mac, Res};
 use super::physl::Network;
@@ -78,7 +78,7 @@ pub fn run_2host_1router() -> Res<()> {
     let mut host_b = IpDevice::new_host_echo(mac_b, "hostB", addr_b, subnet_mask);
     host_b.add_arp_entry(addr_a, mac_a)?;
 
-    let switch = EthernetDevice::build_switch(mac_s, "switch", 3);
+    let switch = EthernetSwitch::build_switch(mac_s, "switch", 3);
     let router = IpDevice::new_router(mac_r, "router", vec![addr_r], subnet_mask);
 
     let mut nw = Network::new(
@@ -133,8 +133,8 @@ pub fn run_2router() -> Res<()> {
     let mut host_d = IpDevice::new_host_echo(mac_d, "host3d", addr_3d, subnet_mask);
     let mut router_r = IpDevice::new_router(mac_r, "routeR", vec![addr_1r, addr_2r], subnet_mask);
     let mut router_s = IpDevice::new_router(mac_s, "routeS", vec![addr_3s, addr_2s], subnet_mask);
-    let switch_1 = EthernetDevice::build_switch(mac_1, "switch1", 3);
-    let switch_3 = EthernetDevice::build_switch(mac_3, "switch3", 3);
+    let switch_1 = EthernetSwitch::build_switch(mac_1, "switch1", 3);
+    let switch_3 = EthernetSwitch::build_switch(mac_3, "switch3", 3);
 
     let ip0 = IP::new_byte(addr_1a, addr_3d, vec![0x01, 0x02]);
     host_a.add_schedule(0, NetworkProtocol::IP(ip0));
@@ -210,8 +210,8 @@ pub fn run_unreachable() -> Res<()> {
     let mut host_d = IpDevice::new_host_echo(mac_d, "host3d", addr_3d, subnet_mask);
     let mut router_r = IpDevice::new_router(mac_r, "routeR", vec![addr_1r, addr_2r], subnet_mask);
     let mut router_s = IpDevice::new_router(mac_s, "routeS", vec![addr_3s, addr_2s], subnet_mask);
-    let switch_1 = EthernetDevice::build_switch(mac_1, "switch1", 3);
-    let switch_3 = EthernetDevice::build_switch(mac_3, "switch3", 3);
+    let switch_1 = EthernetSwitch::build_switch(mac_1, "switch1", 3);
+    let switch_3 = EthernetSwitch::build_switch(mac_3, "switch3", 3);
 
     let ip0 = IP::new_byte(addr_1a, addr_3d, vec![0x01, 0x02]);
     host_a.add_schedule(0, NetworkProtocol::IP(ip0));
@@ -271,7 +271,7 @@ pub fn run_test_router_arp() -> Res<()> {
     // host_a.add_arp_entry(addr_b, mac_b)?;
 
     let host_b = IpDevice::new_host_echo(mac_b, "hostB", addr_b, subnet_mask);
-    let switch = EthernetDevice::build_switch(mac_s, "switch", 3);
+    let switch = EthernetSwitch::build_switch(mac_s, "switch", 3);
     let router = IpDevice::new_router(mac_r, "router", vec![addr_r], subnet_mask);
 
     let mut nw = Network::new(
