@@ -4,7 +4,7 @@ pub mod arp;
 pub mod network_protocol;
 pub mod ip_device;
 
-use crate::experiment::linkl::EthernetDevice;
+use super::linkl::EthernetDevice;
 
 use super::types::{Port, Mac, Res};
 use super::physl::Network;

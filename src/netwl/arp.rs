@@ -1,4 +1,4 @@
-use crate::experiment::utils::{read_2bytes, read_4bytes};
+use crate::utils::{read_2bytes, read_4bytes};
 
 use super::super::types::*;
 use super::ip_addr::IpAddr;
