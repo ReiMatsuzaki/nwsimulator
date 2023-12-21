@@ -50,16 +50,6 @@ impl BaseIpDevice {
         device
     }
 
-    pub fn build(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask, ip_handler: Box<BytesFn>) -> Box<BaseIpDevice> {
-        let device = Self::new(mac, name, ip_addr_list, subnet_mask, ip_handler);
-        Box::new(device)
-    }
-
-    pub fn new_router(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask) -> Box<BaseIpDevice> {
-        let ip_handler = Box::new(|_: &Vec<u8>| Ok("i am router".bytes().collect()));
-        BaseIpDevice::build(mac, name, ip_addr_list, subnet_mask, ip_handler)
-    }
-
     fn pop_frame(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
         self.base.pop_rbuf(ctx)
     }

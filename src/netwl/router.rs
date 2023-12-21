@@ -1,44 +1,22 @@
 use crate::{physl::{BaseDevice, Device, UpdateContext}, types::{Res, Mac}};
 
-use super::{ip_device::{BaseIpDevice, IpDevice}, network_protocol::NetworkProtocol, ip_addr::{IpAddr, SubnetMask}, NetworkLog};
+use super::{ip_device::{BaseIpDevice, IpDevice}, network_protocol::NetworkProtocol, ip_addr::{IpAddr, SubnetMask}};
 
-pub struct IpHost {
+pub struct Router {
     base: BaseIpDevice,
-    schedules: Vec<NetworkLog>,
-    // handler: Box<dyn Fn(&Vec<u8>) -> Res<Option<Vec<u8>>>>,
 }
 
-impl IpHost {
-    pub fn build_echo(mac: Mac, name: &str, ip_addr: IpAddr, subnet_mask: SubnetMask) -> Box<IpHost> {
+impl Router {
+    pub fn build(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask) -> Box<Router> {
         let handler = Box::new(
             |bytes: &Vec<u8>| Ok(bytes.clone())
         );
-        let base = BaseIpDevice::new(mac, name, vec![ip_addr], 
+        let base = BaseIpDevice::new(mac, name, ip_addr_list, 
             subnet_mask, handler);
-        // let handler = Box::new(
-        //     |bytes: &Vec<u8>| Ok(Some(bytes.clone()))
-        // );
-        let host = IpHost {
+        let host = Router {
             base,
-            schedules: Vec::new(),
-            // handler,
         };
         Box::new(host)
-    }
-
-    pub fn add_schedule(&mut self, t: usize, p: NetworkProtocol) {
-        self.schedules.push(NetworkLog { t, p } );
-    }
-
-    fn update_from_schedule(&mut self, ctx: &UpdateContext) -> Res<()> {
-        for idx in 0..self.schedules.len() {
-            let s = &self.schedules[idx];
-            if s.t == ctx.t {
-                let p = s.p.clone();
-                self.push_sbuf(p, ctx)?;
-            }
-        }
-        Ok(())
     }
 
     fn handle(&mut self, p: &NetworkProtocol) -> Res<Option<NetworkProtocol>> {
@@ -49,7 +27,7 @@ impl IpHost {
     }
 }
 
-impl IpDevice for IpHost {
+impl IpDevice for Router {
     fn ip_base(&self) -> &BaseIpDevice {
         &self.base
     }
@@ -59,7 +37,7 @@ impl IpDevice for IpHost {
     }
 }
 
-impl Device for IpHost {
+impl Device for Router {
     fn base(&self) -> &BaseDevice {
         self.base.base()
     }
@@ -73,8 +51,6 @@ impl Device for IpHost {
     }
 
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        self.update_from_schedule(ctx)?;
-
         while let Some(p) = self.pop_rbuf(ctx)? {
             if let Some(p) = self.handle(&p)? {
                 self.push_sbuf(p, ctx)?;
