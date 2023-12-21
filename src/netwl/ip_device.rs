@@ -21,7 +21,6 @@ pub struct BaseIpDevice {
     pub routing_table: HashMap<NetworkPart, IpAddr>,
     pub arp_table: HashMap<IpAddr, Mac>,
 
-    schedules: Vec<NetworkLog>,
     slog: Vec<NetworkLog>,
     rlog: Vec<NetworkLog>,
     ip_handler: Box<BytesFn>,
@@ -44,7 +43,6 @@ impl BaseIpDevice {
             ip_addr_ports: ip_addr_ports,
             routing_table: HashMap::new(),
             arp_table: HashMap::new(),
-            schedules: Vec::new(),
             slog: Vec::new(),
             rlog: Vec::new(),
             ip_handler,
@@ -53,26 +51,7 @@ impl BaseIpDevice {
     }
 
     pub fn build(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask, ip_handler: Box<BytesFn>) -> Box<BaseIpDevice> {
-        let ip_addr_ports: Vec<(IpAddr, Port)> = ip_addr_list
-            .into_iter()
-            .enumerate()
-            .map(|(i, ip_addr)| {
-                (ip_addr, Port::new(i as u32))
-            })
-            .collect();
-        // let num_ports = ip_addr_ports.len();
-        let base = BaseEthernetDevice::new(mac, name, ip_addr_ports.len());
-        let device = BaseIpDevice {
-            base,
-            subnet_mask,
-            ip_addr_ports: ip_addr_ports,
-            routing_table: HashMap::new(),
-            arp_table: HashMap::new(),
-            schedules: Vec::new(),
-            slog: Vec::new(),
-            rlog: Vec::new(),
-            ip_handler,
-        };
+        let device = Self::new(mac, name, ip_addr_list, subnet_mask, ip_handler);
         Box::new(device)
     }
 
@@ -144,10 +123,6 @@ impl BaseIpDevice {
     pub fn add_route_entry(&mut self, nw_part: NetworkPart, ip_addr: IpAddr) -> Res<()> {
         self.routing_table.insert(nw_part, ip_addr);
         Ok(())
-    }
-
-    pub fn add_schedule(&mut self, t: usize, p: NetworkProtocol) {
-        self.schedules.push(NetworkLog { t, p } );
     }
 
     fn decode(&self, frame: &EthernetFrame) -> Res<Option<NetworkProtocol>> {
@@ -333,27 +308,7 @@ impl BaseIpDevice {
         }
     }
 
-    fn update_from_schedule(&mut self, ctx: &UpdateContext) -> Res<()> {
-        for idx in 0..self.schedules.len() {
-            let s = &self.schedules[idx];
-            if s.t == ctx.t {
-                let p = s.p.clone();
-                self.push_sbuf(p, ctx)?;
-            }
-        }
-        Ok(())
-    }
-
     fn base_update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        // FIXME: move schedule to IpHost
-        for idx in 0..self.schedules.len() {
-            let s = &self.schedules[idx];
-            if s.t == ctx.t {
-                let p = s.p.clone();
-                self.push_sbuf(p, ctx)?;
-            }
-        }
-
         while let Some(p) = self.pop_rbuf(ctx)? {
             if let Some(p) = self.handle(&p)? {
                 // sbuf.push_back(p);
@@ -418,10 +373,6 @@ pub trait IpDevice {
         self.ip_base_mut().add_route_entry(nw_part, ip_addr)
     }
 
-    fn add_schedule(&mut self, t: usize, p: NetworkProtocol) {
-        self.ip_base_mut().add_schedule(t, p)
-    }
-
     fn get_ip_addr(&self, port: Port) -> Option<IpAddr> {
         self.ip_base().get_ip_addr(port)
     }
@@ -432,9 +383,5 @@ pub trait IpDevice {
 
     fn get_rlog(&self) -> &Vec<NetworkLog> {
         self.ip_base().get_rlog()
-    }
-
-    fn update_from_schedule(&mut self, ctx: &UpdateContext) -> Res<()> {
-        self.ip_base_mut().update_from_schedule(ctx)
     }
 }

@@ -1,9 +1,10 @@
 use crate::{physl::{BaseDevice, Device, UpdateContext}, types::{Res, Mac}};
 
-use super::{ip_device::{BaseIpDevice, IpDevice}, network_protocol::NetworkProtocol, ip::IP, ip_addr::{IpAddr, SubnetMask}};
+use super::{ip_device::{BaseIpDevice, IpDevice}, network_protocol::NetworkProtocol, ip_addr::{IpAddr, SubnetMask}, NetworkLog};
 
 pub struct IpHost {
     base: BaseIpDevice,
+    schedules: Vec<NetworkLog>,
     // handler: Box<dyn Fn(&Vec<u8>) -> Res<Option<Vec<u8>>>>,
 }
 
@@ -19,9 +20,25 @@ impl IpHost {
         // );
         let host = IpHost {
             base,
+            schedules: Vec::new(),
             // handler,
         };
         Box::new(host)
+    }
+
+    pub fn add_schedule(&mut self, t: usize, p: NetworkProtocol) {
+        self.schedules.push(NetworkLog { t, p } );
+    }
+
+    fn update_from_schedule(&mut self, ctx: &UpdateContext) -> Res<()> {
+        for idx in 0..self.schedules.len() {
+            let s = &self.schedules[idx];
+            if s.t == ctx.t {
+                let p = s.p.clone();
+                self.push_sbuf(p, ctx)?;
+            }
+        }
+        Ok(())
     }
 
     fn handle(&mut self, p: &NetworkProtocol) -> Res<Option<NetworkProtocol>> {
@@ -58,13 +75,6 @@ impl Device for IpHost {
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
         // FIXME: move schedule to IpHost
         self.update_from_schedule(ctx)?;
-        // for idx in 0..self.schedules.len() {
-        //     let s = &self.schedules[idx];
-        //     if s.t == ctx.t {
-        //         let p = s.p.clone();
-        //         self.push_sbuf(p, ctx)?;
-        //     }
-        // }
 
         while let Some(p) = self.pop_rbuf(ctx)? {
             if let Some(p) = self.handle(&p)? {
