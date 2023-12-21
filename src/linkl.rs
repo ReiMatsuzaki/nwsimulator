@@ -1,11 +1,13 @@
 pub mod ethernet_frame;
 pub mod ethernet_log;
 pub mod ethernet_device;
+pub mod ethernet_host;
 pub mod ethernet_switch;
 
 pub use ethernet_frame::*;
 pub use ethernet_log::*;
 pub use ethernet_device::*;
+pub use ethernet_host::*;
 pub use ethernet_switch::*;
 
 use super::types::{Port, Mac, Res};
@@ -20,7 +22,8 @@ pub fn run_sample() -> Res<EthernetLog> {
     let mac2 = Mac::new(25);
 
     let mut host_a = EthernetSwitch::build_host(mac0, "host_a");
-    let host_b = EthernetSwitch::build_host(mac1, "host_b");
+    // let host_b = EthernetSwitch::build_host(mac1, "host_b");
+    let host_b = EthernetHost::build_echo(mac1, "host_b");
     let brdige = EthernetSwitch::build_bridge(mac2, "bridge");
 
     let frame = EthernetFrame::new(mac1, mac0, 3, vec![11, 12, 13]);
@@ -35,7 +38,7 @@ pub fn run_sample() -> Res<EthernetLog> {
     nw.run(60).unwrap();
 
     let d = nw.get_device(mac1).unwrap();
-    let d = d.as_any().downcast_ref::<EthernetSwitch>().unwrap();
+    let d = d.as_any().downcast_ref::<EthernetHost>().unwrap();
     println!("{}", d.get_rlog().len());
     println!("{:?}", d.get_slog()[0]);
     Ok(d.get_slog()[0].clone())

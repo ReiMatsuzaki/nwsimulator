@@ -62,9 +62,9 @@ impl EthernetSwitch {
         &self.base.rlog
     }
 
-    pub fn get_slog(&self) -> &Vec<EthernetLog> {
-        &self.base.rlog
-    }
+    // pub fn get_slog(&self) -> &Vec<EthernetLog> {
+    //     &self.base.rlog
+    // }
 }
 
 impl Device for EthernetSwitch {

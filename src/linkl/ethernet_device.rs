@@ -99,3 +99,36 @@ impl BaseEthernetDevice {
     }
 }
 
+pub trait EthernetDevice {
+    fn ether_base(&self) -> &BaseEthernetDevice;
+
+    fn ether_base_mut(&mut self) -> &mut BaseEthernetDevice;
+
+    // fn base(&self) -> &BaseDevice {
+    //     &self.ether_base().base
+    // }
+
+    // fn base_mut(&mut self) -> &mut BaseDevice {
+    //     &mut self.ether_base_mut().base
+    // }
+
+    fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Option<EthernetFrame> {
+        self.ether_base_mut().pop_rbuf(ctx)
+    }
+
+    fn push_sbuf(&mut self, frame: EthernetFrame, ctx: &UpdateContext) {
+        self.ether_base_mut().push_sbuf(frame, ctx)
+    }
+
+    fn add_forwarding_table(&mut self, dst: Mac, port: Port) {
+        self.ether_base_mut().add_forwarding_table(dst, port)
+    }
+
+    fn get_rlog(&self) -> &Vec<EthernetLog> {
+        &self.ether_base().rlog
+    }
+
+    fn get_slog(&self) -> &Vec<EthernetLog> {
+        &self.ether_base().rlog
+    }
+}
