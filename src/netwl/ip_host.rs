@@ -5,23 +5,23 @@ use super::{ip_device::{BaseIpDevice, IpDevice}, network_protocol::NetworkProtoc
 pub struct IpHost {
     base: BaseIpDevice,
     schedules: Vec<NetworkLog>,
-    // handler: Box<dyn Fn(&Vec<u8>) -> Res<Option<Vec<u8>>>>,
+    ip_reply_handler: Box<dyn Fn(&Vec<u8>) -> Vec<u8>>,
 }
 
 impl IpHost {
     pub fn build_echo(mac: Mac, name: &str, ip_addr: IpAddr, subnet_mask: SubnetMask) -> Box<IpHost> {
-        let handler = Box::new(
-            |bytes: &Vec<u8>| Ok(bytes.clone())
-        );
-        let base = BaseIpDevice::new(mac, name, vec![ip_addr], 
-            subnet_mask, handler);
         // let handler = Box::new(
-        //     |bytes: &Vec<u8>| Ok(Some(bytes.clone()))
+        //     |bytes: &Vec<u8>| Ok(bytes.clone())
         // );
+        let base = BaseIpDevice::new(mac, name, vec![ip_addr], 
+            subnet_mask);
+        let ip_reply_handler = Box::new(
+            |bytes: &Vec<u8>| bytes.clone()
+        );
         let host = IpHost {
             base,
             schedules: Vec::new(),
-            // handler,
+            ip_reply_handler,
         };
         Box::new(host)
     }
@@ -40,13 +40,6 @@ impl IpHost {
         }
         Ok(())
     }
-
-    fn handle(&mut self, p: &NetworkProtocol) -> Res<Option<NetworkProtocol>> {
-        match p {
-            NetworkProtocol::IP(ip) => self.base_handle_ip(ip),
-            NetworkProtocol::ARP(arp) => self.base_handle_arp(arp),
-        }
-    }
 }
 
 impl IpDevice for IpHost {
@@ -56,6 +49,11 @@ impl IpDevice for IpHost {
 
     fn ip_base_mut(&mut self) -> &mut BaseIpDevice {
         &mut self.base
+    }
+
+    fn handle_ip_reply(&mut self, bytes: &Vec<u8>, _ctx: &UpdateContext) -> Res<Option<Vec<u8>>> {
+        let bytes = (self.ip_reply_handler)(bytes);
+        Ok(Some(bytes))
     }
 }
 
@@ -74,15 +72,7 @@ impl Device for IpHost {
 
     fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
         self.update_from_schedule(ctx)?;
-
-        while let Some(p) = self.pop_rbuf(ctx)? {
-            if let Some(p) = self.handle(&p)? {
-                self.push_sbuf(p, ctx)?;
-            }
-        }
-
-        self.update_table()?;
-
+        self.base_update(ctx)?;
         Ok(())
     }
 }

@@ -8,8 +8,6 @@ use super::ip::*;
 use super::arp::*;
 use super::ip_addr::*;
 
-type BytesFn = dyn Fn(&Vec<u8>) -> Res<Vec<u8>>;
-
 pub struct BaseIpDevice {
     pub base: BaseEthernetDevice,
 
@@ -22,11 +20,10 @@ pub struct BaseIpDevice {
 
     slog: Vec<NetworkLog>,
     rlog: Vec<NetworkLog>,
-    ip_handler: Box<BytesFn>,
 }
 
 impl BaseIpDevice {
-    pub fn new(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask, ip_handler: Box<BytesFn>) -> BaseIpDevice {
+    pub fn new(mac: Mac, name: &str, ip_addr_list: Vec<IpAddr>, subnet_mask: SubnetMask) -> BaseIpDevice {
         let ip_addr_ports: Vec<(IpAddr, Port)> = ip_addr_list
             .into_iter()
             .enumerate()
@@ -44,7 +41,6 @@ impl BaseIpDevice {
             arp_table: HashMap::new(),
             slog: Vec::new(),
             rlog: Vec::new(),
-            ip_handler,
         };
         device
     }
@@ -160,43 +156,6 @@ impl BaseIpDevice {
         Ok(frame)
     }
 
-    fn handle(&mut self, p: &NetworkProtocol) -> Res<Option<NetworkProtocol>> {
-        match p {
-            NetworkProtocol::IP(ip) => self.handle_ip(ip),
-            NetworkProtocol::ARP(arp) => self.handle_arp(arp),
-        }
-    }
-
-    fn handle_ip(&self, ip: &IP) -> Res<Option<NetworkProtocol>> {
-        if self.is_for_me(&ip.dst) {
-            match &ip.payload {
-                IpPayload::ICMP { ty: 3, code } => { // unreachable
-                    Err(Error::IpUnreashcable { 
-                        code: *code,
-                        msg: "".to_string() 
-                    })
-                }
-                IpPayload::ICMP { ty, code} => {
-                    panic!("unimplemented ICMP ty={} code={}", ty, code)
-                }
-                IpPayload::Bytes(xs) => {
-                    let payload = (self.ip_handler)(&xs)?;
-                    let ip = IP::new_byte(ip.dst, ip.src, payload);
-                    let ip = NetworkProtocol::IP(ip);
-                    Ok(Some(ip))
-                }
-            }
-        } else {
-            match &ip.payload {
-                IpPayload::ICMP { ty: _, code: _ } => Ok(None),
-                IpPayload::Bytes(_) => {
-                    let p = NetworkProtocol::IP(ip.clone());
-                    Ok(Some(p))
-                }
-            }
-        }
-    }
-
     fn handle_arp(&mut self, arp: &ARP) -> Res<Option<NetworkProtocol>> {
         if self.is_for_me(&arp.target_ipaddr) {
             match arp.opcode {
@@ -296,19 +255,6 @@ impl BaseIpDevice {
             Err(e) => return Err(e)
         }
     }
-
-    fn base_update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        while let Some(p) = self.pop_rbuf(ctx)? {
-            if let Some(p) = self.handle(&p)? {
-                // sbuf.push_back(p);
-                self.push_sbuf(p, ctx)?;
-            }
-        }
-
-        self.update_table()?;
-
-        Ok(())
-    }
 }
 
 impl Device for BaseIpDevice {
@@ -324,8 +270,8 @@ impl Device for BaseIpDevice {
         self
     }
 
-    fn update(&mut self, ctx: &UpdateContext) -> Res<()> {
-        self.base_update(ctx)
+    fn update(&mut self, _ctx: &UpdateContext) -> Res<()> {
+        panic!("not implemented")
     }
 }
 
@@ -340,14 +286,6 @@ pub trait IpDevice {
 
     fn pop_rbuf(&mut self, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
         self.ip_base_mut().pop_rbuf(ctx)
-    }
-
-    fn update_table(&mut self) -> Res<()> {
-        self.ip_base_mut().update_table()
-    }
-
-    fn base_handle_ip(&self, ip: &IP) -> Res<Option<NetworkProtocol>> {
-        self.ip_base().handle_ip(ip)
     }
 
     fn base_handle_arp(&mut self, arp: &ARP) -> Res<Option<NetworkProtocol>> {
@@ -372,5 +310,58 @@ pub trait IpDevice {
 
     fn get_rlog(&self) -> &Vec<NetworkLog> {
         self.ip_base().get_rlog()
+    }
+
+    fn handle(&mut self, p: &NetworkProtocol, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
+        match p {
+            NetworkProtocol::IP(ip) => self.handle_ip(ip, ctx),
+            NetworkProtocol::ARP(arp) => self.ip_base_mut().handle_arp(arp),
+        }
+    }
+
+    fn handle_ip(&mut self, ip: &IP, ctx: &UpdateContext) -> Res<Option<NetworkProtocol>> {
+        if self.ip_base().is_for_me(&ip.dst) {
+            match &ip.payload {
+                IpPayload::ICMP { ty: 3, code } => { // unreachable
+                    Err(Error::IpUnreashcable { 
+                        code: *code,
+                        msg: "".to_string() 
+                    })
+                }
+                IpPayload::ICMP { ty, code} => {
+                    panic!("unimplemented ICMP ty={} code={}", ty, code)
+                }
+                IpPayload::Bytes(xs) => {
+                    if let Some(payload) = self.handle_ip_reply(&xs, ctx)? {
+                        let ip = IP::new_byte(ip.dst, ip.src, payload);
+                        let ip = NetworkProtocol::IP(ip);
+                        Ok(Some(ip))
+                    } else {
+                        Ok(None)
+                    }
+
+                }
+            }
+        } else {
+            match &ip.payload {
+                IpPayload::ICMP { ty: _, code: _ } => Ok(None),
+                IpPayload::Bytes(_) => {
+                    let p = NetworkProtocol::IP(ip.clone());
+                    Ok(Some(p))
+                }
+            }
+        }
+    }
+
+    fn handle_ip_reply(&mut self, bytes: &Vec<u8>, ctx: &UpdateContext) -> Res<Option<Vec<u8>>>;
+
+    fn base_update(&mut self, ctx: &UpdateContext) -> Res<()> {
+        while let Some(p) = self.pop_rbuf(ctx)? {
+            if let Some(p) = self.handle(&p, ctx)? {
+                self.push_sbuf(p, ctx)?;
+            }
+        }
+        self.ip_base_mut().update_table()?;
+        Ok(())
     }
 }
