@@ -1,6 +1,6 @@
 use crate::types::*;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TCP {
     pub src: TPort,
     pub dst: TPort,
@@ -15,7 +15,7 @@ pub struct TCP {
     pub content: TcpContent,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TcpContent {
     Syn,
     SynAck,
@@ -174,6 +174,16 @@ impl TCP {
         bytes
     }
 }
+
+
+impl std::fmt::Display for TCP {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // FIXME: duplicated code
+        write!(f, "TCP(dst:{}, src:{}, flags:{:?})", self.dst.value, self.src.value, self.content)
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {

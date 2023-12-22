@@ -12,9 +12,9 @@ use super::types::*;
 pub struct TcpHost {
     ip_base: BaseIpDevice,
     insts: VecDeque<Inst>,
-
-    // socket
-    socket: Option<Socket>
+    socket: Option<Socket>,
+    recv_log: Vec<TCP>, // FIXME: define TcpLog and use it
+    send_log: Vec<TCP>,
 }
 
 impl TcpHost { 
@@ -23,6 +23,8 @@ impl TcpHost {
             ip_base: BaseIpDevice::new(mac, name, vec![ip_addr], subnet_mask),
             socket: None,
             insts: VecDeque::new(),
+            recv_log: Vec::new(),
+            send_log: Vec::new(),
         }
     }
 
@@ -35,24 +37,38 @@ impl TcpHost {
         self.ip_base.get_ip_addr(Port::new(0)).unwrap()
     }
 
+    pub fn add_arp_entry(&mut self, ip_addr: IpAddr, mac: Mac) -> Res<()> {
+        self.ip_base.add_arp_entry(ip_addr, mac)
+    }
+
     fn consume_inst(&mut self, _ctx: &UpdateContext) -> Option<TCP> {
         let inst = self.insts.front()?.clone();
         match &mut self.socket {
             None => match inst {
-                Inst::Connect(_sid, ip_addr, port) => {
-                    let s = Socket::new(State::SynSent, port, ip_addr);
-                    self.socket = Some(s);
-                    let tcp = TCP::new_syn(TPort::new(0),  port, 0);
-                    self.insts.pop_front();
-                    Some(tcp)
-                },
-                Inst::Listen(_sid, _port) => {
-                    let s = Socket::new(State::Listening, TPort::new(0), IpAddr::new(0));
+                Inst::Socket(_sid) => {
+                    let s = Socket::new();
                     self.socket = Some(s);
                     self.insts.pop_front();
                     None
-                }
+                },
                 _ => None
+            }
+            Some(s) if s.state == State::Closed => {
+                match inst {
+                    Inst::Connect(_sid, ip_addr, port) => {
+                        s.set_state(State::SynSent);
+                        s.set_dst(port, ip_addr);
+                        self.insts.pop_front();
+                        let tcp = TCP::new_syn(TPort::new(0),  port, 0);
+                        Some(tcp)
+                    },
+                    Inst::Listen(_sid, _port) => {
+                        s.set_state(State::Listening);
+                        self.insts.pop_front();
+                        None
+                    }       
+                    _ => None
+                }
             }
             Some(s) if s.state == State::Established => {
                 match inst {
@@ -86,9 +102,13 @@ impl TcpHost {
         match &mut self.socket {
             None => Err(Error::InvalidTcpReceived { msg: "state is NoConnection".to_string() }),
             Some(s) => match s.state {
+                State::Closed => Err(Error::InvalidTcpReceived { msg: "state is closed but TCP received".to_string() }),
                 State::Listening => {
                     if let TcpContent::Syn = cnt {
                         s.state = State::SynAckSent;
+                        // FIXME: src_ip
+                        let src_ip = IpAddr::new(7621);
+                        s.set_dst(tcp.src, src_ip.clone());
                         let tcp = TCP::new_synack(tcp.dst, tcp.src, 0);
                         Ok(Some(tcp))
                     } else {
@@ -179,9 +199,42 @@ impl TcpHost {
         Ok(())
     }
 
+    fn add_recv_log(&mut self, tcp: TCP, ctx: &UpdateContext) {
+        let disp = crate::output::is_transport_level();
+        if disp {
+            print!("{:>3}: ", ctx.t);
+            // FIXME: print ip address correct
+            println!("{}({}): receive: {:}",
+                     self.get_name(), 
+                     self.ip_base.ip_addr_ports[0].0,
+                     &tcp);
+        }
+
+        self.recv_log.push(tcp);
+    }
+
+    fn add_send_log(&mut self, tcp: TCP, ctx: &UpdateContext) {
+        let disp = crate::output::is_transport_level();
+        if disp {
+            print!("{:>3}: ", ctx.t);
+            // FIXME: print ip address correct
+            println!("{}({}): send   : {:}",            
+                     self.get_name(), 
+                     self.ip_base.ip_addr_ports[0].0,
+                     &tcp);
+        }
+
+        self.send_log.push(tcp);
+    }
+
+    pub fn get_recv_log(&self) -> &Vec<TCP> {
+        &self.recv_log
+    }
+
     fn recv(&mut self, ctx: &UpdateContext) -> Res<Option<TCP>> {
         if let Some(ip) = self.recv_ip(ctx)? {
             let tcp = TCP::decode(&ip.payload_as_bytes())?;
+            self.add_recv_log(tcp.clone(), ctx);
             Ok(Some(tcp))
         } else {
             Ok(None)
@@ -194,6 +247,7 @@ impl TcpHost {
             let dst = socket.dst_ip;
             let ip = IP::new_byte(self.get_ip_addr(), dst, payload);
             self.send_ip(ip, ctx)?;
+            self.add_send_log(tcp, ctx);
             Ok(())
         } else {
             return Err(Error::InvalidTcpReceived { msg: "socket is None".to_string() });
